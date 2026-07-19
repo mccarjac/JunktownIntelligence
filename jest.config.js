@@ -1,8 +1,13 @@
 module.exports = {
   preset: 'react-native',
   testEnvironment: 'node',
+  // `expo-.*` and `@octokit` are needed (not just bare `expo`) so packages
+  // like expo-file-system and @octokit/rest, which ship ESM, get
+  // transformed instead of failing to parse — this only matters once
+  // coverage collection actually loads files like exportImport.ts and
+  // gitIntegration.ts that were previously excluded from the report.
   transformIgnorePatterns: [
-    'node_modules/(?!(react-native|@react-native|@react-navigation|expo|@expo|@unimodules|react-native-.*)/)',
+    'node_modules/(?!(react-native|@react-native|@react-navigation|expo|expo-.*|@expo|@unimodules|@octokit|react-native-.*)/)',
   ],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
   moduleNameMapper: {
@@ -21,21 +26,17 @@ module.exports = {
     '!src/utils/**/index.{ts,tsx}',
     '!src/components/**/index.{ts,tsx}',
     '!src/screens/**/index.{ts,tsx}',
-    // Exclude files without tests (for now)
-    '!src/utils/exportImport.ts',
-    '!src/utils/factionStats.ts',
-    '!src/utils/gitIntegration.ts',
-    '!src/utils/influenceAnalysis.ts',
   ],
-  coverageThreshold: {
-    global: {
-      branches: 50,
-      functions: 55,
-      lines: 70,
-      statements: 70,
-    },
-  },
-  coverageReporters: ['text', 'lcov', 'html'],
+  // No coverageThreshold for now — coverage reporting is informational only
+  // (see .github/workflows/coverage.yml). Thresholds return once the gaps
+  // tracked in AGENTS.md's "Test coverage gaps" section are closed: patch
+  // coverage via the coverage action's `threshold` input, project coverage
+  // via a `coverageThreshold` re-added here.
+  coverageReporters: ['text', 'lcov', 'html', 'json', 'json-summary'],
   testMatch: ['<rootDir>/tst/**/*.(test|spec).(ts|tsx|js)'],
-  roots: ['<rootDir>/tst'],
+  // 'src' must be a root too (not just 'tst'), otherwise Jest's coverage
+  // collector can't add zero-coverage entries for src files that aren't
+  // imported by any test — collectCoverageFrom would silently show nothing
+  // for genuinely untested files instead of a real 0% row.
+  roots: ['<rootDir>/tst', '<rootDir>/src'],
 };
