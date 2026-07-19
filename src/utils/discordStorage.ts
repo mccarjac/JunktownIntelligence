@@ -19,7 +19,7 @@ const DISCORD_ALIASES_KEY = 'gameCharacterManager_discord_aliases';
 export const getDiscordConfig = async (): Promise<DiscordConfig> => {
   const config =
     await SafeAsyncStorageJSONParser.getItem<DiscordConfig>(DISCORD_CONFIG_KEY);
-  
+
   if (!config) {
     return {
       enabled: false,
@@ -44,26 +44,26 @@ export const getDiscordConfig = async (): Promise<DiscordConfig> => {
         updatedAt: new Date().toISOString(),
       };
       config.serverConfigs.push(legacyConfig);
-      
+
       // Update existing messages to tag them with the legacy server config ID
-      const existingMessages = await SafeAsyncStorageJSONParser.getItem<DiscordMessage[]>(
-        DISCORD_MESSAGES_KEY
-      );
+      const existingMessages =
+        await SafeAsyncStorageJSONParser.getItem<DiscordMessage[]>(
+          DISCORD_MESSAGES_KEY
+        );
       if (existingMessages && existingMessages.length > 0) {
         const updatedMessages = existingMessages.map(msg => ({
           ...msg,
           serverConfigId: msg.serverConfigId || 'legacy-default',
           guildId: msg.guildId || config.guildId,
         }));
-        await SafeAsyncStorageJSONParser.setItem(DISCORD_MESSAGES_KEY, updatedMessages);
-        console.log(
-          `[Discord Storage] Tagged ${updatedMessages.length} existing messages with legacy-default serverConfigId`
+        await SafeAsyncStorageJSONParser.setItem(
+          DISCORD_MESSAGES_KEY,
+          updatedMessages
         );
       }
-      
+
       // Save migrated config
       await saveDiscordConfig(config);
-      console.log('[Discord Storage] Migrated legacy config to multi-server format');
     }
   }
 
@@ -102,7 +102,7 @@ export const addDiscordServerConfig = async (
 ): Promise<DiscordServerConfig> => {
   const config = await getDiscordConfig();
   const now = new Date().toISOString();
-  
+
   const newServerConfig: DiscordServerConfig = {
     ...serverConfig,
     id: `server-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
@@ -112,10 +112,9 @@ export const addDiscordServerConfig = async (
 
   config.serverConfigs = config.serverConfigs || [];
   config.serverConfigs.push(newServerConfig);
-  
+
   await saveDiscordConfig(config);
-  console.log(`[Discord Storage] Added server config: ${newServerConfig.name} (${newServerConfig.id})`);
-  
+
   return newServerConfig;
 };
 
@@ -128,10 +127,12 @@ export const updateDiscordServerConfig = async (
 ): Promise<DiscordServerConfig | null> => {
   const config = await getDiscordConfig();
   const serverConfigs = config.serverConfigs || [];
-  
+
   const index = serverConfigs.findIndex(sc => sc.id === serverConfigId);
   if (index === -1) {
-    console.error(`[Discord Storage] Server config not found: ${serverConfigId}`);
+    console.error(
+      `[Discord Storage] Server config not found: ${serverConfigId}`
+    );
     return null;
   }
 
@@ -143,8 +144,7 @@ export const updateDiscordServerConfig = async (
 
   serverConfigs[index] = updatedServerConfig;
   await saveDiscordConfig(config);
-  console.log(`[Discord Storage] Updated server config: ${updatedServerConfig.name} (${serverConfigId})`);
-  
+
   return updatedServerConfig;
 };
 
@@ -156,10 +156,9 @@ export const removeDiscordServerConfig = async (
 ): Promise<void> => {
   const config = await getDiscordConfig();
   const serverConfigs = config.serverConfigs || [];
-  
+
   config.serverConfigs = serverConfigs.filter(sc => sc.id !== serverConfigId);
   await saveDiscordConfig(config);
-  console.log(`[Discord Storage] Removed server config: ${serverConfigId}`);
 };
 
 /**
@@ -261,11 +260,11 @@ export const getDiscordMessages = async (
       DISCORD_MESSAGES_KEY
     );
   const allMessages = messages || [];
-  
+
   if (!serverConfigId) {
     return allMessages;
   }
-  
+
   // Filter by server config ID
   return allMessages.filter(m => m.serverConfigId === serverConfigId);
 };
@@ -289,19 +288,6 @@ export const addDiscordMessages = async (
   const existingMessages = await getDiscordMessages();
   const existingMap = new Map(existingMessages.map(m => [m.id, m]));
 
-  console.log(
-    `[Discord Storage] Adding messages - existing: ${existingMessages.length}, new: ${newMessages.length}`
-  );
-  if (newMessages.length > 0) {
-    console.log(
-      `[Discord Storage] Sample new message content:`,
-      newMessages[0].content?.substring(0, 100) || '(empty)'
-    );
-  }
-
-  let updatedCount = 0;
-  let addedCount = 0;
-
   // Merge new messages with existing ones
   newMessages.forEach(newMsg => {
     const existing = existingMap.get(newMsg.id);
@@ -324,14 +310,9 @@ export const addDiscordMessages = async (
         extractedCharacterName:
           existing.extractedCharacterName || newMsg.extractedCharacterName,
       });
-      updatedCount++;
-      console.log(
-        `[Discord Storage] Updated message ${newMsg.id.substring(0, 8)}... - preserving characterId: ${existing.characterId ? 'YES' : 'NO'}`
-      );
     } else {
       // Add new message
       existingMap.set(newMsg.id, newMsg);
-      addedCount++;
     }
   });
 
@@ -342,9 +323,6 @@ export const addDiscordMessages = async (
   );
 
   await saveDiscordMessages(allMessages);
-  console.log(
-    `[Discord Storage] Updated ${updatedCount} messages, added ${addedCount} messages, total: ${allMessages.length}`
-  );
 };
 
 /**
@@ -374,7 +352,6 @@ export const getDiscordMessagesForChannel = async (
  */
 export const clearDiscordMessages = async (): Promise<void> => {
   await SafeAsyncStorageJSONParser.removeItem(DISCORD_MESSAGES_KEY);
-  console.log('[Discord Storage] Cleared all Discord messages');
 };
 
 /**
@@ -441,9 +418,6 @@ export const addOrUpdateCharacterAlias = async (
       updatedAt: now,
     };
     await saveDiscordCharacterAliases(aliases);
-    console.log(
-      `[Discord Aliases] Updated alias "${normalizedAlias}" -> Character ${characterId.substring(0, 8)}... (usage: ${aliases[existingIndex].usageCount}, confidence: ${aliases[existingIndex].confidence})`
-    );
     return aliases[existingIndex];
   } else {
     // Create new alias
@@ -458,9 +432,6 @@ export const addOrUpdateCharacterAlias = async (
     };
     aliases.push(newAlias);
     await saveDiscordCharacterAliases(aliases);
-    console.log(
-      `[Discord Aliases] Created NEW alias "${normalizedAlias}" -> Character ${characterId.substring(0, 8)}... for user ${discordUserId.substring(0, 8)}...`
-    );
     return newAlias;
   }
 };
@@ -483,15 +454,9 @@ export const getCharacterIdForAlias = async (
   );
 
   if (exactMatch && exactMatch.confidence > 0.5) {
-    console.log(
-      `[Discord Aliases] Found existing alias "${normalizedAlias}" -> Character ${exactMatch.characterId.substring(0, 8)}... (confidence: ${exactMatch.confidence})`
-    );
     return exactMatch.characterId;
   }
 
-  console.log(
-    `[Discord Aliases] No alias found for "${normalizedAlias}" and user ${discordUserId.substring(0, 8)}...`
-  );
   return undefined;
 };
 
@@ -526,9 +491,6 @@ export const applyAliasToMessages = async (
 
   if (updateCount > 0) {
     await saveDiscordMessages(updatedMessages);
-    console.log(
-      `[Discord Storage] Applied alias "${alias}" to ${updateCount} messages`
-    );
   }
 
   return updateCount;
@@ -650,7 +612,8 @@ export const importDiscordDataset = async (
     // Ensure serverConfigs is properly set
     const configToSave = {
       ...dataset.config,
-      serverConfigs: dataset.serverConfigs || dataset.config.serverConfigs || [],
+      serverConfigs:
+        dataset.serverConfigs || dataset.config.serverConfigs || [],
     };
     await saveDiscordConfig(configToSave);
     await saveDiscordUserMappings(dataset.userMappings);

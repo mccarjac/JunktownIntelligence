@@ -230,10 +230,13 @@ See `ANDROID_BUILD.md` for detailed Android build instructions using EAS CLI.
 
 ## Testing & Validation
 
-- **No test framework currently configured** - manual testing required
-- Test on Android device/emulator primarily
-- Web version may have limited functionality
-- Always run `npm run check-all` before committing
+- **Jest is configured** (`jest-expo`); tests live in `tst/`. Run `npm test`.
+  Add tests for new storage behavior and bug fixes.
+- Storage tests mock `SafeAsyncStorageJSONParser`; some assert on the order of
+  `getItem` calls, so update mocks if you change a function's read sequence.
+- Also test on Android device/emulator; web version may have limited functionality
+- Always run `npm run check-all` before committing (type-check + lint +
+  format:check + test — all must pass; CI enforces type-check, lint, and test)
 - Verify changes with `npm run android` or `npm run web`
 
 ### Manual Testing Checklist
@@ -266,10 +269,9 @@ When making changes, test:
 
 ### Known Limitations
 
-- No automated tests currently
 - Web platform may have reduced functionality
-- Export/import feature needs manual testing
-- Some TypeScript strict mode errors exist (being addressed incrementally)
+- Export/import feature benefits from manual testing on-device
+- Type-check and lint are green and enforced in CI — keep them that way
 
 ## Security Considerations
 

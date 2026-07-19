@@ -77,7 +77,7 @@ Created comprehensive test suite in `tst/utils/datasetSorting.test.ts` that cove
 }
 ```
 
-*Changing order creates large, meaningless diffs*
+_Changing order creates large, meaningless diffs_
 
 ### After This Change
 
@@ -92,7 +92,7 @@ Created comprehensive test suite in `tst/utils/datasetSorting.test.ts` that cove
 }
 ```
 
-*Only actual changes show in the diff*
+_Only actual changes show in the diff_
 
 ## Usage
 
@@ -109,6 +109,7 @@ The sorting is applied automatically - no changes needed to existing code. All e
 ## Performance Impact
 
 Minimal performance impact:
+
 - Sorting is O(n log n) for each entity type
 - Runs only during export operations (not during normal app usage)
 - Typically completes in milliseconds even with hundreds of entities
@@ -127,6 +128,7 @@ Potential improvements for the future:
 ### Why Events Sort Descending (Most Recent First)
 
 Events are sorted by date in descending order (most recent first) because:
+
 - Timeline views typically show recent events first
 - Makes it easier to see what changed in recent exports
 - Matches common convention for time-based data
@@ -134,6 +136,7 @@ Events are sorted by date in descending order (most recent first) because:
 ### Why Case-Insensitive Sorting
 
 Names are sorted case-insensitively to:
+
 - Match user expectations ("Alice" comes before "bob")
 - Prevent sorting anomalies based on capitalization
 - Provide consistent results regardless of user input style
@@ -141,6 +144,7 @@ Names are sorted case-insensitively to:
 ### Why Nested Arrays Are Sorted
 
 Sorting nested arrays (like relationships, perkIds, imageUris) ensures:
+
 - Even adding/removing a single item produces minimal diff
 - Order of array elements doesn't change randomly
 - Easier to spot duplicates or missing items in PR reviews

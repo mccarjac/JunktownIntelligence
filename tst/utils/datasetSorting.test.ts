@@ -1,7 +1,11 @@
 import { sortDatasetDeterministically } from '@utils/datasetSorting';
-import type { GameCharacter, GameLocation, GameEvent } from '@models/types';
+import {
+  RelationshipStanding,
+  type GameCharacter,
+  type GameLocation,
+  type GameEvent,
+} from '@models/types';
 import type { StoredFaction } from '@utils/characterStorage';
-import { RelationshipStanding } from '@models/types';
 
 describe('sortDatasetDeterministically', () => {
   describe('Character sorting', () => {
@@ -76,7 +80,11 @@ describe('sortDatasetDeterministically', () => {
       expect(char.relationships[1].characterName).toBe('Zoe');
       expect(char.perkIds).toEqual(['perk1', 'perk2', 'perk3']);
       expect(char.distinctionIds).toEqual(['dist1', 'dist2']);
-      expect(char.imageUris).toEqual(['image1.jpg', 'image2.jpg', 'image3.jpg']);
+      expect(char.imageUris).toEqual([
+        'image1.jpg',
+        'image2.jpg',
+        'image3.jpg',
+      ]);
     });
   });
 
@@ -243,10 +251,7 @@ describe('sortDatasetDeterministically', () => {
           { id: '2', name: 'Bob' },
           { id: '1', name: 'Alice' },
         ] as GameCharacter[],
-        factions: [
-          { name: 'Zulu' },
-          { name: 'Alpha' },
-        ] as StoredFaction[],
+        factions: [{ name: 'Zulu' }, { name: 'Alpha' }] as StoredFaction[],
         locations: [
           { id: '2', name: 'Zoo' },
           { id: '1', name: 'Airport' },
@@ -353,7 +358,7 @@ describe('sortDatasetDeterministically', () => {
             factions: [],
             relationships: [],
             perkIds: [],
-          } as GameCharacter,
+          } as unknown as GameCharacter,
         ],
       };
 

@@ -17,6 +17,7 @@ import {
   clearDiscordMessages,
 } from '@/utils/discordStorage';
 import { testDiscordConnection, syncDiscordMessages } from '@/utils/discordApi';
+import { DiscordServerConfig } from '@models/types';
 
 export const DiscordConfigScreen: React.FC = () => {
   const [botToken, setBotToken] = useState('');
@@ -28,6 +29,9 @@ export const DiscordConfigScreen: React.FC = () => {
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState('');
   const [lastSync, setLastSync] = useState<string | undefined>();
+  // Preserve any existing multi-server configs so saving the legacy fields
+  // on this screen doesn't wipe them out.
+  const [serverConfigs, setServerConfigs] = useState<DiscordServerConfig[]>([]);
 
   // Load existing config on mount
   useEffect(() => {
@@ -42,6 +46,7 @@ export const DiscordConfigScreen: React.FC = () => {
     setEnabled(config.enabled);
     setAutoSync(config.autoSync);
     setLastSync(config.lastSync);
+    setServerConfigs(config.serverConfigs || []);
   };
 
   const handleSave = async () => {
@@ -53,6 +58,7 @@ export const DiscordConfigScreen: React.FC = () => {
         enabled,
         autoSync,
         lastSync,
+        serverConfigs,
       });
       Alert.alert('Success', 'Discord configuration saved successfully', [
         { text: 'OK' },
@@ -82,6 +88,7 @@ export const DiscordConfigScreen: React.FC = () => {
         enabled,
         autoSync,
         lastSync,
+        serverConfigs,
       });
 
       const result = await testDiscordConnection();

@@ -21,7 +21,10 @@ import {
   getDiscordConfig,
   saveDiscordConfig,
 } from '@/utils/discordStorage';
-import { testDiscordConnection, syncDiscordMessagesForServer } from '@/utils/discordApi';
+import {
+  testDiscordConnection,
+  syncDiscordMessagesForServer,
+} from '@/utils/discordApi';
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -65,7 +68,7 @@ export const DiscordServerListScreen: React.FC = () => {
       config.enabled = value;
       await saveDiscordConfig(config);
       setGlobalEnabled(value);
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Failed to update Discord integration status', [
         { text: 'OK' },
       ]);
@@ -78,7 +81,7 @@ export const DiscordServerListScreen: React.FC = () => {
       config.autoSync = value;
       await saveDiscordConfig(config);
       setAutoSync(value);
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Failed to update auto-sync status', [
         { text: 'OK' },
       ]);
@@ -89,7 +92,7 @@ export const DiscordServerListScreen: React.FC = () => {
     try {
       await updateDiscordServerConfig(serverId, { enabled: value });
       await loadData();
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Failed to update server configuration', [
         { text: 'OK' },
       ]);
@@ -100,9 +103,11 @@ export const DiscordServerListScreen: React.FC = () => {
     try {
       const result = await testDiscordConnection(serverId);
       if (result.success) {
-        Alert.alert('Success', `Connection test successful for ${serverName}!`, [
-          { text: 'OK' },
-        ]);
+        Alert.alert(
+          'Success',
+          `Connection test successful for ${serverName}!`,
+          [{ text: 'OK' }]
+        );
       } else {
         Alert.alert('Connection Failed', result.error || 'Unknown error', [
           { text: 'OK' },
@@ -154,7 +159,7 @@ export const DiscordServerListScreen: React.FC = () => {
               Alert.alert('Success', 'Server configuration deleted', [
                 { text: 'OK' },
               ]);
-            } catch (error) {
+            } catch {
               Alert.alert('Error', 'Failed to delete server configuration', [
                 { text: 'OK' },
               ]);

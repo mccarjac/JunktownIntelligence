@@ -14,7 +14,11 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { Picker } from '@react-native-picker/picker';
 import { colors as themeColors } from '@/styles/theme';
-import type { DiscordMessage, GameCharacter, DiscordServerConfig } from '@models/types';
+import type {
+  DiscordMessage,
+  GameCharacter,
+  DiscordServerConfig,
+} from '@models/types';
 import {
   getDiscordMessages,
   getDiscordServerConfigs,
@@ -32,7 +36,8 @@ export const DiscordMessagesScreen: React.FC = () => {
     []
   );
   const [serverConfigs, setServerConfigs] = useState<DiscordServerConfig[]>([]);
-  const [selectedServerConfigId, setSelectedServerConfigId] = useState<string>('all');
+  const [selectedServerConfigId, setSelectedServerConfigId] =
+    useState<string>('all');
   const [characters, setCharacters] = useState<GameCharacter[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterType>('all');
@@ -47,7 +52,9 @@ export const DiscordMessagesScreen: React.FC = () => {
     setLoading(true);
     try {
       const [msgs, chars, configs] = await Promise.all([
-        getDiscordMessages(selectedServerConfigId === 'all' ? undefined : selectedServerConfigId),
+        getDiscordMessages(
+          selectedServerConfigId === 'all' ? undefined : selectedServerConfigId
+        ),
         loadCharacters(),
         getDiscordServerConfigs(),
       ]);
@@ -231,7 +238,9 @@ export const DiscordMessagesScreen: React.FC = () => {
     const characterName = getCharacterName(item.characterId);
     const isUntagged = !item.characterId;
     const isIgnored = item.ignored;
-    const serverConfig = serverConfigs.find(sc => sc.id === item.serverConfigId);
+    const serverConfig = serverConfigs.find(
+      sc => sc.id === item.serverConfigId
+    );
 
     return (
       <View
@@ -253,7 +262,7 @@ export const DiscordMessagesScreen: React.FC = () => {
               </Text>
             </View>
           )}
-          
+
           <View style={styles.messageHeader}>
             <View style={styles.authorInfo}>
               <Text style={styles.authorName}>{item.authorUsername}</Text>
@@ -460,12 +469,12 @@ export const DiscordMessagesScreen: React.FC = () => {
           <View style={styles.pickerWrapper}>
             <Picker
               selectedValue={selectedServerConfigId}
-              onValueChange={(value) => setSelectedServerConfigId(value)}
+              onValueChange={value => setSelectedServerConfigId(value)}
               style={styles.picker}
               dropdownIconColor={'#FFFFFF'}
             >
               <Picker.Item label="All Servers/Channels" value="all" />
-              {serverConfigs.map((config) => (
+              {serverConfigs.map(config => (
                 <Picker.Item
                   key={config.id}
                   label={config.name}
