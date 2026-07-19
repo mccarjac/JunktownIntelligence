@@ -437,9 +437,10 @@ export const CharacterDetailScreen: React.FC = () => {
             <Text style={styles.discordContent} numberOfLines={5}>
               {msg.content || '[No content]'}
             </Text>
-            {msg.images && msg.images.length > 0 && (
+            {msg.imageUris && msg.imageUris.length > 0 && (
               <Text style={styles.discordImageIndicator}>
-                📷 {msg.images.length} image{msg.images.length !== 1 ? 's' : ''}
+                📷 {msg.imageUris.length} image
+                {msg.imageUris.length !== 1 ? 's' : ''}
               </Text>
             )}
             <TouchableOpacity

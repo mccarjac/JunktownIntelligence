@@ -25,37 +25,22 @@ const stripMarkdown = (text: string): string => {
  * Strips markdown formatting from the extracted name
  */
 export const extractCharacterName = (content: string): string | null => {
-  console.log(
-    `[Character Extraction] Testing content: "${content.substring(0, 100)}${content.length > 100 ? '...' : ''}"`
-  );
-
   // First try to match >>NAME format with brackets
-  console.log(`[Character Extraction] Trying bracketed format >>NAME...`);
   let match = content.match(/^>>\s*([A-Za-z0-9_*-]+)/);
   if (match && match[1]) {
     const rawName = match[1].trim();
     const cleanName = stripMarkdown(rawName);
-    console.log(
-      `[Character Extraction] MATCHED bracketed format! Raw: "${rawName}", Clean: "${cleanName}"`
-    );
     return cleanName;
   }
-  console.log(`[Character Extraction] Bracketed format: NO MATCH`);
 
   // Try to match >Name format without brackets (followed by newline or space)
-  console.log(`[Character Extraction] Trying simple format >Name...`);
   match = content.match(/^>\s*([A-Za-z0-9_*-]+)/);
   if (match && match[1]) {
     const rawName = match[1].trim();
     const cleanName = stripMarkdown(rawName);
-    console.log(
-      `[Character Extraction] MATCHED simple format! Raw: "${rawName}", Clean: "${cleanName}"`
-    );
     return cleanName;
   }
-  console.log(`[Character Extraction] Simple format: NO MATCH`);
 
-  console.log(`[Character Extraction] No character name pattern found`);
   return null;
 };
 
@@ -110,18 +95,6 @@ export const resolveCharacterFromName = async (
     allCharacters.map(c => ({ id: c.id, name: c.name }))
   );
 
-  console.log(
-    `[Character Resolution] Attempting to match "${characterName}" for user ${discordUserId.substring(0, 8)}...`
-  );
-  console.log(
-    `[Character Resolution] Found ${matches.length} potential matches`
-  );
-  if (matches.length > 0) {
-    console.log(
-      `[Character Resolution] Best match: "${matches[0].name}" (confidence: ${matches[0].confidence})`
-    );
-  }
-
   // If we have a high confidence match, use it
   if (matches.length > 0 && matches[0].confidence >= 0.9) {
     // Store this as an alias for future use
@@ -132,10 +105,6 @@ export const resolveCharacterFromName = async (
       matches[0].confidence
     );
 
-    console.log(
-      `[Character Resolution] Auto-matched to "${matches[0].name}" - confidence ${matches[0].confidence}`
-    );
-
     return {
       characterId: matches[0].characterId,
       needsManualSelection: false,
@@ -144,9 +113,6 @@ export const resolveCharacterFromName = async (
   }
 
   // Multiple low-confidence matches or no matches - need manual selection
-  console.log(
-    `[Character Resolution] Needs manual selection - confidence too low or no matches`
-  );
 
   return {
     characterId: null,

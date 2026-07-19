@@ -24,7 +24,7 @@ export const isDiscordConfigured = async (
   serverConfigId?: string
 ): Promise<boolean> => {
   const config = await getDiscordConfig();
-  
+
   if (!config.enabled) {
     return false;
   }
@@ -43,7 +43,12 @@ export const isDiscordConfigured = async (
 
   // Check specific server config
   const serverConfig = await getDiscordServerConfig(serverConfigId);
-  return !!serverConfig && serverConfig.enabled && !!serverConfig.botToken && !!serverConfig.channelId;
+  return (
+    !!serverConfig &&
+    serverConfig.enabled &&
+    !!serverConfig.botToken &&
+    !!serverConfig.channelId
+  );
 };
 
 /**
@@ -112,7 +117,7 @@ export const fetchDiscordMessages = async (
   if (!serverConfig) {
     throw new Error(`Server config not found: ${serverConfigId}`);
   }
-  
+
   if (!serverConfig.botToken || !serverConfig.channelId) {
     throw new Error('Discord server config incomplete');
   }
@@ -136,28 +141,6 @@ export const fetchDiscordMessages = async (
   }
 
   const messages: DiscordApiMessage[] = await response.json();
-
-  console.log(
-    `[Discord API] Fetched ${messages.length} messages from Discord API for ${serverConfig.name}`
-  );
-  if (messages.length > 0) {
-    console.log(
-      `[Discord API] Sample raw message:`,
-      JSON.stringify(messages[0], null, 2)
-    );
-    console.log(
-      `[Discord API] Sample message content:`,
-      messages[0].content?.substring(0, 100) || '(empty)'
-    );
-    console.log(
-      `[Discord API] Content field type:`,
-      typeof messages[0].content,
-      `| Is undefined:`,
-      messages[0].content === undefined,
-      `| Is empty string:`,
-      messages[0].content === ''
-    );
-  }
 
   // Convert to our format and fetch character mappings
   const convertedMessages: DiscordMessage[] = await Promise.all(
@@ -239,63 +222,6 @@ export const fetchDiscordMessages = async (
     })
   );
 
-  console.log(`[Discord API] Converted ${convertedMessages.length} messages`);
-  if (convertedMessages.length > 0) {
-    console.log(
-      `[Discord API] Sample converted message:`,
-      JSON.stringify({
-        id: convertedMessages[0].id,
-        content: convertedMessages[0].content?.substring(0, 100) || '(empty)',
-        extractedName: convertedMessages[0].extractedCharacterName,
-      })
-    );
-
-    // Log auto-matching statistics
-    const withExtractedNames = convertedMessages.filter(
-      m => m.extractedCharacterName
-    );
-    const autoMatched = convertedMessages.filter(
-      m => m.extractedCharacterName && m.characterId
-    );
-    const needsManual = convertedMessages.filter(
-      m => m.extractedCharacterName && !m.characterId
-    );
-
-    if (withExtractedNames.length > 0) {
-      console.log(
-        `[Discord API] Character name extraction: ${withExtractedNames.length} messages had names`
-      );
-      console.log(
-        `[Discord API] Auto-matched: ${autoMatched.length} messages (confidence ≥0.9)`
-      );
-      console.log(
-        `[Discord API] Need manual selection: ${needsManual.length} messages`
-      );
-    }
-
-    // Check if all messages have empty content - likely missing MESSAGE_CONTENT intent
-    const emptyContentCount = convertedMessages.filter(
-      m => !m.content || m.content.trim() === ''
-    ).length;
-    if (
-      emptyContentCount === convertedMessages.length &&
-      convertedMessages.length > 0
-    ) {
-      console.warn(
-        `[Discord API] WARNING: All ${convertedMessages.length} messages have empty content!`
-      );
-      console.warn(
-        `[Discord API] This usually means your Discord bot is missing the MESSAGE_CONTENT intent.`
-      );
-      console.warn(
-        `[Discord API] Fix: Go to Discord Developer Portal → Your Bot → Bot tab → Enable "MESSAGE CONTENT INTENT"`
-      );
-      console.warn(
-        `[Discord API] See DISCORD_MESSAGE_CONTENT_INTENT.md for detailed instructions.`
-      );
-    }
-  }
-
   return convertedMessages;
 };
 
@@ -343,7 +269,11 @@ export const syncDiscordMessagesForServer = async (
     throw new Error(`Server config not found: ${serverConfigId}`);
   }
 
-  if (!serverConfig.enabled || !serverConfig.botToken || !serverConfig.channelId) {
+  if (
+    !serverConfig.enabled ||
+    !serverConfig.botToken ||
+    !serverConfig.channelId
+  ) {
     throw new Error('Server config is not properly configured or enabled');
   }
 
@@ -357,14 +287,20 @@ export const syncDiscordMessagesForServer = async (
   const maxFetches = 10; // Limit to 1000 messages per sync (100 per fetch)
 
   while (hasMore && fetchCount < maxFetches) {
-    const messages = await fetchDiscordMessages(serverConfigId, 100, lastMessageId);
+    const messages = await fetchDiscordMessages(
+      serverConfigId,
+      100,
+      lastMessageId
+    );
     if (messages.length === 0) {
       hasMore = false;
     } else {
       allMessages = [...allMessages, ...messages];
       lastMessageId = messages[messages.length - 1].id;
       fetchCount++;
-      onProgress?.(`Fetched ${allMessages.length} messages from ${serverConfig.name}...`);
+      onProgress?.(
+        `Fetched ${allMessages.length} messages from ${serverConfig.name}...`
+      );
     }
   }
 
@@ -407,17 +343,22 @@ export const syncDiscordMessages = async (
 
   for (let i = 0; i < serverConfigs.length; i++) {
     const serverConfig = serverConfigs[i];
-    onProgress?.(`Syncing ${i + 1}/${serverConfigs.length}: ${serverConfig.name}...`);
-    
+    onProgress?.(
+      `Syncing ${i + 1}/${serverConfigs.length}: ${serverConfig.name}...`
+    );
+
     try {
       const result = await syncDiscordMessagesForServer(
         serverConfig.id,
-        (status) => onProgress?.(`[${serverConfig.name}] ${status}`)
+        status => onProgress?.(`[${serverConfig.name}] ${status}`)
       );
       totalNewMessages += result.newMessages;
       totalMessages += result.totalMessages;
     } catch (error) {
-      console.error(`[Discord Sync] Failed to sync ${serverConfig.name}:`, error);
+      console.error(
+        `[Discord Sync] Failed to sync ${serverConfig.name}:`,
+        error
+      );
       onProgress?.(`⚠️ Failed to sync ${serverConfig.name}`);
     }
   }

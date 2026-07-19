@@ -11,6 +11,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { SafeAsyncStorageJSONParser } from './safeAsyncStorageJSONParser';
 import { exportDiscordDataset, importDiscordDataset } from './discordStorage';
 import { sortDatasetDeterministically } from './datasetSorting';
+import { runExclusive } from './storageQueue';
 
 export interface FactionRelationship {
   factionName: string;
@@ -67,51 +68,54 @@ export const loadCharacters = async (): Promise<GameCharacter[]> => {
 
 export const addCharacter = async (
   character: Omit<GameCharacter, 'id' | 'createdAt' | 'updatedAt'>
-): Promise<GameCharacter> => {
-  const characters = await loadCharacters();
-  const newCharacter: GameCharacter = {
-    ...character,
-    id: uuidv4(),
-    present: false, // Default to not present
-    retired: false, // Default to not retired
-    relationships: character.relationships ?? [], // Ensure relationships array exists
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
+): Promise<GameCharacter> =>
+  runExclusive(STORAGE_KEY, async () => {
+    const characters = await loadCharacters();
+    const newCharacter: GameCharacter = {
+      ...character,
+      id: uuidv4(),
+      present: false, // Default to not present
+      retired: false, // Default to not retired
+      relationships: character.relationships ?? [], // Ensure relationships array exists
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
 
-  await saveCharacters([...characters, newCharacter]);
-  return newCharacter;
-};
+    await saveCharacters([...characters, newCharacter]);
+    return newCharacter;
+  });
 
 export const updateCharacter = async (
   id: string,
   updates: Partial<GameCharacter>
-): Promise<GameCharacter | null> => {
-  const characters = await loadCharacters();
-  const index = characters.findIndex(c => c.id === id);
+): Promise<GameCharacter | null> =>
+  runExclusive(STORAGE_KEY, async () => {
+    const characters = await loadCharacters();
+    const index = characters.findIndex(c => c.id === id);
 
-  if (index === -1) return null;
+    if (index === -1) return null;
 
-  const updatedCharacter: GameCharacter = {
-    ...characters[index],
-    ...updates,
-    updatedAt: new Date().toISOString(),
-  };
+    const updatedCharacter: GameCharacter = {
+      ...characters[index],
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
 
-  characters[index] = updatedCharacter;
-  await saveCharacters(characters);
-  return updatedCharacter;
-};
+    characters[index] = updatedCharacter;
+    await saveCharacters(characters);
+    return updatedCharacter;
+  });
 
-export const deleteCharacter = async (id: string): Promise<boolean> => {
-  const characters = await loadCharacters();
-  const filtered = characters.filter(c => c.id !== id);
+export const deleteCharacter = async (id: string): Promise<boolean> =>
+  runExclusive(STORAGE_KEY, async () => {
+    const characters = await loadCharacters();
+    const filtered = characters.filter(c => c.id !== id);
 
-  if (filtered.length === characters.length) return false;
+    if (filtered.length === characters.length) return false;
 
-  await saveCharacters(filtered);
-  return true;
-};
+    await saveCharacters(filtered);
+    return true;
+  });
 
 export const exportDataset = async (): Promise<string> => {
   const characterData =
@@ -183,10 +187,6 @@ const migrateOldLocationData = async (
 
     // If character has old location field but no locationId
     if (oldLocation && !char.locationId) {
-      console.log(
-        `Migrating old location "${oldLocation}" for character ${char.name}`
-      );
-
       // Check if we already have a location with this name
       let locationId = locationNameToId.get(oldLocation.toLowerCase());
 
@@ -207,9 +207,6 @@ const migrateOldLocationData = async (
           };
           locationsToCreate.set(oldLocation, newLocation);
           locationNameToId.set(oldLocation.toLowerCase(), locationId);
-          console.log(
-            `Creating new location for "${oldLocation}" with ID ${locationId}`
-          );
         }
       }
 
@@ -225,9 +222,6 @@ const migrateOldLocationData = async (
     const newLocationArray = Array.from(locationsToCreate.values());
     const allLocations = [...existingLocations, ...newLocationArray];
     await saveLocations(allLocations);
-    console.log(
-      `Migrated and created ${newLocationArray.length} location(s) from old data`
-    );
   }
 };
 
@@ -241,24 +235,11 @@ const ensureLocationsExist = async (
 
   // Collect all unique location IDs from characters
   const referencedLocationIds = new Set<string>();
-  characters.forEach((char, index) => {
-    console.log(`Character ${index} (${char.name}):`, {
-      hasLocationId: !!char.locationId,
-      locationId: char.locationId,
-      hasOldLocation: !!(char as any).location,
-      oldLocation: (char as any).location,
-    });
-
+  characters.forEach(char => {
     if (char.locationId) {
       referencedLocationIds.add(char.locationId);
     }
   });
-
-  console.log(
-    `Found ${referencedLocationIds.size} unique location IDs referenced by ${characters.length} characters`
-  );
-  console.log('Referenced location IDs:', Array.from(referencedLocationIds));
-  console.log('Existing location IDs:', Array.from(existingLocationIds));
 
   // Create placeholder locations for any missing location IDs
   for (const locationId of referencedLocationIds) {
@@ -273,9 +254,6 @@ const ensureLocationsExist = async (
         updatedAt: now,
       };
       newLocations.push(newLocation);
-      console.log(
-        `Creating new location: ${newLocation.name} with ID: ${locationId}`
-      );
     }
   }
 
@@ -283,28 +261,15 @@ const ensureLocationsExist = async (
   if (newLocations.length > 0) {
     const allLocations = [...existingLocations, ...newLocations];
     await saveLocations(allLocations);
-    console.log(
-      `Auto-created ${newLocations.length} missing location(s) during import`
-    );
-    console.log('Total locations after import:', allLocations.length);
-  } else {
-    console.log('No new locations needed to be created');
   }
 };
 
 export const importDataset = async (jsonData: string): Promise<boolean> => {
   try {
     const dataset = JSON.parse(jsonData);
-    console.log('Starting import. Dataset contains:', {
-      characters: dataset.characters?.length || 0,
-      factions: dataset.factions?.length || 0,
-      locations: dataset.locations?.length || 0,
-      events: dataset.events?.length || 0,
-    });
 
     // Handle location data first (merge with existing, don't replace)
     if (dataset.locations && Array.isArray(dataset.locations)) {
-      console.log('Importing locations from dataset...');
       const existingLocations = await loadLocations();
       const mergedLocations = [...existingLocations];
 
@@ -320,49 +285,32 @@ export const importDataset = async (jsonData: string): Promise<boolean> => {
             mergedLocations[existingIndex].updatedAt
           ) {
             mergedLocations[existingIndex] = importedLocation;
-            console.log(`Updated location: ${importedLocation.name}`);
           }
         } else {
           // Add new location
           mergedLocations.push(importedLocation);
-          console.log(`Added new location: ${importedLocation.name}`);
         }
       }
 
       await saveLocations(mergedLocations);
-      console.log(`Saved ${mergedLocations.length} total locations`);
     }
 
     // Auto-create any missing locations referenced by characters
     if (dataset.characters) {
-      console.log(
-        '[importDataset] Checking for old location data to migrate...'
-      );
       await migrateOldLocationData(dataset.characters);
-      console.log('[importDataset] Old location data migration complete');
-
-      console.log(
-        '[importDataset] Checking for missing locations referenced by characters...'
-      );
       await ensureLocationsExist(dataset.characters);
-      console.log('[importDataset] Location existence check complete');
     }
 
     // Handle character data
-    console.log('[importDataset] Saving character data...');
     const characterDataset: CharacterDataset = {
       characters: dataset.characters || [],
       version: dataset.version || '1.0',
       lastUpdated: dataset.lastUpdated || new Date().toISOString(),
     };
     await SafeAsyncStorageJSONParser.setItem(STORAGE_KEY, characterDataset);
-    console.log(
-      `[importDataset] Saved ${characterDataset.characters.length} characters`
-    );
 
     // Handle faction data if present
     if (dataset.factions) {
-      console.log('[importDataset] Saving faction data...');
       const factionDataset: FactionDataset = {
         factions: dataset.factions,
         version: dataset.version || '1.0',
@@ -372,36 +320,26 @@ export const importDataset = async (jsonData: string): Promise<boolean> => {
         FACTION_STORAGE_KEY,
         factionDataset
       );
-      console.log(`[importDataset] Saved ${dataset.factions.length} factions`);
     }
 
     // Handle event data if present
     if (dataset.events) {
-      console.log('[importDataset] Saving event data...');
       const eventDataset: EventDataset = {
         events: dataset.events,
         version: dataset.version || '1.0',
         lastUpdated: dataset.lastUpdated || new Date().toISOString(),
       };
       await SafeAsyncStorageJSONParser.setItem(EVENT_STORAGE_KEY, eventDataset);
-      console.log(`[importDataset] Saved ${dataset.events.length} events`);
     }
 
     // Import Discord data if present
     if (dataset.discord) {
-      console.log('[importDataset] Importing Discord data...');
       await importDiscordDataset(dataset.discord, true); // Merge mode
-      console.log('[importDataset] Discord data imported');
     }
 
-    console.log('[importDataset] Import completed successfully');
     return true;
   } catch (error) {
     console.error('[importDataset] Import failed:', error);
-    console.error(
-      '[importDataset] Error stack:',
-      error instanceof Error ? error.stack : 'No stack trace'
-    );
     return false;
   }
 };
@@ -531,15 +469,116 @@ const mergeCharacterProperties = (
   return { merged, conflicts };
 };
 
+// Merge imported characters into the current list, collecting conflicts and
+// newly added characters. Pure: does not touch storage.
+const mergeImportedCharacters = (
+  currentData: GameCharacter[],
+  importedCharacters: GameCharacter[]
+): {
+  mergedCharacters: GameCharacter[];
+  addedCharacters: GameCharacter[];
+  conflicts: MergeConflict[];
+} => {
+  const mergedCharacters = [...currentData];
+  const addedCharacters: GameCharacter[] = [];
+  const conflicts: MergeConflict[] = [];
+
+  for (const importedChar of importedCharacters) {
+    const existingIndex = currentData.findIndex(
+      current => current.id === importedChar.id
+    );
+
+    if (existingIndex === -1) {
+      // No conflict - add new character
+      addedCharacters.push(importedChar);
+      mergedCharacters.push(importedChar);
+    } else {
+      // Potential conflict - merge properties
+      const existing = currentData[existingIndex];
+      const { merged, conflicts: propConflicts } = mergeCharacterProperties(
+        existing,
+        importedChar
+      );
+
+      if (propConflicts.length > 0) {
+        conflicts.push({
+          id: importedChar.id,
+          existing,
+          imported: importedChar,
+          conflicts: propConflicts,
+        });
+      }
+
+      // Use merged version even when there are conflicts - non-conflicting
+      // properties are still merged.
+      mergedCharacters[existingIndex] = merged;
+    }
+  }
+
+  return { mergedCharacters, addedCharacters, conflicts };
+};
+
+// Merge imported factions into the already-loaded current factions and persist.
+// Existing factions are only overwritten when the imported copy is newer.
+const applyFactionMerge = async (
+  currentFactions: StoredFaction[],
+  importedFactions: StoredFaction[]
+): Promise<void> => {
+  const mergedFactions = [...currentFactions];
+  const existingFactionNames = new Set(currentFactions.map(f => f.name));
+
+  for (const importedFaction of importedFactions) {
+    if (!existingFactionNames.has(importedFaction.name)) {
+      mergedFactions.push(importedFaction);
+    } else {
+      const existingIndex = mergedFactions.findIndex(
+        f => f.name === importedFaction.name
+      );
+      if (
+        existingIndex >= 0 &&
+        importedFaction.updatedAt > mergedFactions[existingIndex].updatedAt
+      ) {
+        mergedFactions[existingIndex] = importedFaction;
+      }
+    }
+  }
+
+  await saveFactions(mergedFactions);
+};
+
+// Merge imported locations with the stored locations and persist. Existing
+// locations are only overwritten when the imported copy is newer.
+const applyLocationMerge = async (
+  importedLocations: GameLocation[]
+): Promise<void> => {
+  const currentLocations = await loadLocations();
+  const mergedLocations = [...currentLocations];
+  const existingLocationIds = new Set(currentLocations.map(l => l.id));
+
+  for (const importedLocation of importedLocations) {
+    if (!existingLocationIds.has(importedLocation.id)) {
+      mergedLocations.push(importedLocation);
+    } else {
+      const existingIndex = mergedLocations.findIndex(
+        l => l.id === importedLocation.id
+      );
+      if (
+        existingIndex >= 0 &&
+        importedLocation.updatedAt > mergedLocations[existingIndex].updatedAt
+      ) {
+        mergedLocations[existingIndex] = importedLocation;
+      }
+    }
+  }
+
+  await saveLocations(mergedLocations);
+};
+
 export const mergeDatasets = async (jsonData: string): Promise<boolean> => {
   try {
     const currentData = await loadCharacters();
     const currentFactions = await loadFactions();
     const importedData = JSON.parse(jsonData);
-
-    const mergedCharacters = [...currentData];
-    const addedCharacters: GameCharacter[] = [];
-    const conflicts: MergeConflict[] = [];
 
     // Auto-create any missing locations referenced by imported characters
     if (importedData.characters) {
@@ -547,90 +586,18 @@ export const mergeDatasets = async (jsonData: string): Promise<boolean> => {
       await ensureLocationsExist(importedData.characters);
     }
 
-    // Merge characters
-    for (const importedChar of importedData.characters || []) {
-      const existingIndex = currentData.findIndex(
-        current => current.id === importedChar.id
-      );
-
-      if (existingIndex === -1) {
-        // No conflict - add new character
-        addedCharacters.push(importedChar);
-        mergedCharacters.push(importedChar);
-      } else {
-        // Potential conflict - merge properties
-        const existing = currentData[existingIndex];
-        const { merged, conflicts: propConflicts } = mergeCharacterProperties(
-          existing,
-          importedChar
-        );
-
-        if (propConflicts.length > 0) {
-          conflicts.push({
-            id: importedChar.id,
-            existing,
-            imported: importedChar,
-            conflicts: propConflicts,
-          });
-        }
-
-        // Use merged version (even if there are conflicts, we still merge non-conflicting properties)
-        mergedCharacters[existingIndex] = merged;
-      }
-    }
-
+    const { mergedCharacters } = mergeImportedCharacters(
+      currentData,
+      importedData.characters || []
+    );
     await saveCharacters(mergedCharacters);
 
-    // Merge factions
     if (importedData.factions) {
-      const mergedFactions = [...currentFactions];
-      const existingFactionNames = new Set(currentFactions.map(f => f.name));
-
-      for (const importedFaction of importedData.factions) {
-        if (!existingFactionNames.has(importedFaction.name)) {
-          mergedFactions.push(importedFaction);
-        } else {
-          // Update existing faction if imported one has more recent update
-          const existingIndex = mergedFactions.findIndex(
-            f => f.name === importedFaction.name
-          );
-          if (
-            existingIndex >= 0 &&
-            importedFaction.updatedAt > mergedFactions[existingIndex].updatedAt
-          ) {
-            mergedFactions[existingIndex] = importedFaction;
-          }
-        }
-      }
-
-      await saveFactions(mergedFactions);
+      await applyFactionMerge(currentFactions, importedData.factions);
     }
 
-    // Merge locations
     if (importedData.locations) {
-      const currentLocations = await loadLocations();
-      const mergedLocations = [...currentLocations];
-      const existingLocationIds = new Set(currentLocations.map(l => l.id));
-
-      for (const importedLocation of importedData.locations) {
-        if (!existingLocationIds.has(importedLocation.id)) {
-          mergedLocations.push(importedLocation);
-        } else {
-          // Update existing location if imported one has more recent update
-          const existingIndex = mergedLocations.findIndex(
-            l => l.id === importedLocation.id
-          );
-          if (
-            existingIndex >= 0 &&
-            importedLocation.updatedAt >
-              mergedLocations[existingIndex].updatedAt
-          ) {
-            mergedLocations[existingIndex] = importedLocation;
-          }
-        }
-      }
-
-      await saveLocations(mergedLocations);
+      await applyLocationMerge(importedData.locations);
     }
 
     return true;
@@ -649,100 +616,22 @@ export const mergeDatasetWithConflictResolution = async (
     const currentFactions = await loadFactions();
     const importedData = JSON.parse(jsonData);
 
-    const mergedCharacters = [...currentData];
-    const addedCharacters: GameCharacter[] = [];
-    const conflicts: MergeConflict[] = [];
-
     // Auto-create any missing locations referenced by imported characters
     if (importedData.characters) {
       await migrateOldLocationData(importedData.characters);
       await ensureLocationsExist(importedData.characters);
     }
 
-    // Merge characters
-    for (const importedChar of importedData.characters || []) {
-      const existingIndex = currentData.findIndex(
-        current => current.id === importedChar.id
-      );
-
-      if (existingIndex === -1) {
-        // No conflict - add new character
-        addedCharacters.push(importedChar);
-        mergedCharacters.push(importedChar);
-      } else {
-        // Potential conflict - merge properties
-        const existing = currentData[existingIndex];
-        const { merged, conflicts: propConflicts } = mergeCharacterProperties(
-          existing,
-          importedChar
-        );
-
-        if (propConflicts.length > 0) {
-          conflicts.push({
-            id: importedChar.id,
-            existing,
-            imported: importedChar,
-            conflicts: propConflicts,
-          });
-        }
-
-        // Use merged version for now
-        mergedCharacters[existingIndex] = merged;
-      }
-    }
-
+    const { mergedCharacters, addedCharacters, conflicts } =
+      mergeImportedCharacters(currentData, importedData.characters || []);
     await saveCharacters(mergedCharacters);
 
-    // Merge factions
     if (importedData.factions) {
-      const mergedFactions = [...currentFactions];
-      const existingFactionNames = new Set(currentFactions.map(f => f.name));
-
-      for (const importedFaction of importedData.factions) {
-        if (!existingFactionNames.has(importedFaction.name)) {
-          mergedFactions.push(importedFaction);
-        } else {
-          // Update existing faction if imported one has more recent update
-          const existingIndex = mergedFactions.findIndex(
-            f => f.name === importedFaction.name
-          );
-          if (
-            existingIndex >= 0 &&
-            importedFaction.updatedAt > mergedFactions[existingIndex].updatedAt
-          ) {
-            mergedFactions[existingIndex] = importedFaction;
-          }
-        }
-      }
-
-      await saveFactions(mergedFactions);
+      await applyFactionMerge(currentFactions, importedData.factions);
     }
 
-    // Merge locations
     if (importedData.locations) {
-      const currentLocations = await loadLocations();
-      const mergedLocations = [...currentLocations];
-      const existingLocationIds = new Set(currentLocations.map(l => l.id));
-
-      for (const importedLocation of importedData.locations) {
-        if (!existingLocationIds.has(importedLocation.id)) {
-          mergedLocations.push(importedLocation);
-        } else {
-          // Update existing location if imported one has more recent update
-          const existingIndex = mergedLocations.findIndex(
-            l => l.id === importedLocation.id
-          );
-          if (
-            existingIndex >= 0 &&
-            importedLocation.updatedAt >
-              mergedLocations[existingIndex].updatedAt
-          ) {
-            mergedLocations[existingIndex] = importedLocation;
-          }
-        }
-      }
-
-      await saveLocations(mergedLocations);
+      await applyLocationMerge(importedData.locations);
     }
 
     return {
@@ -764,33 +653,35 @@ export const mergeDatasetWithConflictResolution = async (
 
 export const toggleCharacterPresent = async (
   id: string
-): Promise<GameCharacter | null> => {
-  const characters = await loadCharacters();
-  const index = characters.findIndex(c => c.id === id);
+): Promise<GameCharacter | null> =>
+  runExclusive(STORAGE_KEY, async () => {
+    const characters = await loadCharacters();
+    const index = characters.findIndex(c => c.id === id);
 
-  if (index === -1) return null;
+    if (index === -1) return null;
 
-  const updatedCharacter: GameCharacter = {
-    ...characters[index],
-    present: !characters[index].present,
-    updatedAt: new Date().toISOString(),
-  };
+    const updatedCharacter: GameCharacter = {
+      ...characters[index],
+      present: !characters[index].present,
+      updatedAt: new Date().toISOString(),
+    };
 
-  characters[index] = updatedCharacter;
-  await saveCharacters(characters);
-  return updatedCharacter;
-};
+    characters[index] = updatedCharacter;
+    await saveCharacters(characters);
+    return updatedCharacter;
+  });
 
-export const resetAllPresentStatus = async (): Promise<void> => {
-  const characters = await loadCharacters();
-  const updatedCharacters = characters.map(character => ({
-    ...character,
-    present: false,
-    updatedAt: new Date().toISOString(),
-  }));
+export const resetAllPresentStatus = async (): Promise<void> =>
+  runExclusive(STORAGE_KEY, async () => {
+    const characters = await loadCharacters();
+    const updatedCharacters = characters.map(character => ({
+      ...character,
+      present: false,
+      updatedAt: new Date().toISOString(),
+    }));
 
-  await saveCharacters(updatedCharacters);
-};
+    await saveCharacters(updatedCharacters);
+  });
 
 export const clearStorage = async (): Promise<void> => {
   await SafeAsyncStorageJSONParser.removeItem(STORAGE_KEY);
@@ -837,76 +728,83 @@ export const getFactionDescription = async (
 export const saveFactionDescription = async (
   factionName: string,
   description: string
-): Promise<void> => {
-  const factions = await loadFactions();
-  const existingIndex = factions.findIndex(f => f.name === factionName);
+): Promise<void> =>
+  runExclusive(FACTION_STORAGE_KEY, async () => {
+    const factions = await loadFactions();
+    const existingIndex = factions.findIndex(f => f.name === factionName);
 
-  const now = new Date().toISOString();
+    const now = new Date().toISOString();
 
-  if (existingIndex >= 0) {
-    // Update existing faction
-    factions[existingIndex] = {
-      ...factions[existingIndex],
-      description,
-      updatedAt: now,
-    };
-  } else {
-    // Create new faction
-    factions.push({
-      name: factionName,
-      description,
-      createdAt: now,
-      updatedAt: now,
-    });
-  }
+    if (existingIndex >= 0) {
+      // Update existing faction
+      factions[existingIndex] = {
+        ...factions[existingIndex],
+        description,
+        updatedAt: now,
+      };
+    } else {
+      // Create new faction
+      factions.push({
+        name: factionName,
+        description,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
 
-  await saveFactions(factions);
-};
+    await saveFactions(factions);
+  });
 
 export const getAllStoredFactions = async (): Promise<StoredFaction[]> => {
   return await loadFactions();
 };
 
-export const deleteFaction = async (factionName: string): Promise<boolean> => {
-  const factions = await loadFactions();
-  const filtered = factions.filter(f => f.name !== factionName);
+export const deleteFaction = async (factionName: string): Promise<boolean> =>
+  runExclusive(FACTION_STORAGE_KEY, async () => {
+    const factions = await loadFactions();
+    const filtered = factions.filter(f => f.name !== factionName);
 
-  if (filtered.length === factions.length) return false;
+    if (filtered.length === factions.length) return false;
 
-  await saveFactions(filtered);
-  return true;
-};
+    await saveFactions(filtered);
+    return true;
+  });
 
 export const deleteFactionCompletely = async (
   factionName: string
 ): Promise<{ success: boolean; charactersUpdated: number }> => {
   try {
-    // First, remove the faction from all characters
-    const characters = await loadCharacters();
-    let charactersUpdated = 0;
+    // First, remove the faction from all characters (serialized against other
+    // character writes so the read-modify-write can't be clobbered).
+    const charactersUpdated = await runExclusive(STORAGE_KEY, async () => {
+      const characters = await loadCharacters();
+      let updatedCount = 0;
 
-    const updatedCharacters = characters.map(character => {
-      const originalFactionCount = character.factions.length;
-      const updatedFactions = character.factions.filter(
-        faction => faction.name !== factionName
-      );
+      const updatedCharacters = characters.map(character => {
+        const originalFactionCount = character.factions.length;
+        const updatedFactions = character.factions.filter(
+          faction => faction.name !== factionName
+        );
 
-      if (updatedFactions.length !== originalFactionCount) {
-        charactersUpdated++;
-        return {
-          ...character,
-          factions: updatedFactions,
-          updatedAt: new Date().toISOString(),
-        };
+        if (updatedFactions.length !== originalFactionCount) {
+          updatedCount++;
+          return {
+            ...character,
+            factions: updatedFactions,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+
+        return character;
+      });
+
+      // Save updated characters if any were modified
+      if (updatedCount > 0) {
+        await saveCharacters(updatedCharacters);
       }
 
-      return character;
+      return updatedCount;
     });
-
-    // Save updated characters if any were modified
-    if (charactersUpdated > 0) {
-      await saveCharacters(updatedCharacters);
-    }
 
     // Then remove the faction from centralized storage
     await deleteFaction(factionName);
@@ -930,57 +828,60 @@ export const createFaction = async (factionData: {
   imageUri?: string;
   imageUris?: string[];
   relationships?: FactionRelationship[];
-}): Promise<boolean> => {
-  const existingFactions = await loadFactions();
+  retired?: boolean;
+}): Promise<boolean> =>
+  runExclusive(FACTION_STORAGE_KEY, async () => {
+    const existingFactions = await loadFactions();
 
-  // Check if faction with this name already exists
-  const existingFaction = existingFactions.find(
-    f => f.name.toLowerCase() === factionData.name.toLowerCase()
-  );
-  if (existingFaction) {
-    return false; // Faction already exists
-  }
+    // Check if faction with this name already exists
+    const existingFaction = existingFactions.find(
+      f => f.name.toLowerCase() === factionData.name.toLowerCase()
+    );
+    if (existingFaction) {
+      return false; // Faction already exists
+    }
 
-  const now = new Date().toISOString();
-  const newFaction: StoredFaction = {
-    name: factionData.name,
-    description: factionData.description,
-    imageUri: factionData.imageUri,
-    imageUris: factionData.imageUris,
-    relationships: factionData.relationships || [],
-    createdAt: now,
-    updatedAt: now,
-  };
+    const now = new Date().toISOString();
+    const newFaction: StoredFaction = {
+      name: factionData.name,
+      description: factionData.description,
+      imageUri: factionData.imageUri,
+      imageUris: factionData.imageUris,
+      relationships: factionData.relationships || [],
+      retired: factionData.retired ?? false,
+      createdAt: now,
+      updatedAt: now,
+    };
 
-  // Add bidirectional relationships
-  const updatedFactions = [...existingFactions, newFaction];
-  if (factionData.relationships && factionData.relationships.length > 0) {
-    factionData.relationships.forEach(relationship => {
-      const targetFaction = updatedFactions.find(
-        f => f.name === relationship.factionName
-      );
-      if (targetFaction) {
-        // Add reciprocal relationship if it doesn't exist
-        const reciprocalExists = (targetFaction.relationships || []).some(
-          r => r.factionName === factionData.name
+    // Add bidirectional relationships
+    const updatedFactions = [...existingFactions, newFaction];
+    if (factionData.relationships && factionData.relationships.length > 0) {
+      factionData.relationships.forEach(relationship => {
+        const targetFaction = updatedFactions.find(
+          f => f.name === relationship.factionName
         );
-        if (!reciprocalExists) {
-          targetFaction.relationships = [
-            ...(targetFaction.relationships || []),
-            {
-              factionName: factionData.name,
-              relationshipType: relationship.relationshipType,
-            },
-          ];
-          targetFaction.updatedAt = now;
+        if (targetFaction) {
+          // Add reciprocal relationship if it doesn't exist
+          const reciprocalExists = (targetFaction.relationships || []).some(
+            r => r.factionName === factionData.name
+          );
+          if (!reciprocalExists) {
+            targetFaction.relationships = [
+              ...(targetFaction.relationships || []),
+              {
+                factionName: factionData.name,
+                relationshipType: relationship.relationshipType,
+              },
+            ];
+            targetFaction.updatedAt = now;
+          }
         }
-      }
-    });
-  }
+      });
+    }
 
-  await saveFactions(updatedFactions);
-  return true;
-};
+    await saveFactions(updatedFactions);
+    return true;
+  });
 
 export const updateFaction = async (
   factionName: string,
@@ -990,229 +891,237 @@ export const updateFaction = async (
     imageUri?: string;
     imageUris?: string[];
     relationships?: FactionRelationship[];
+    retired?: boolean;
   }
-): Promise<StoredFaction | null> => {
-  const factions = await loadFactions();
-  const index = factions.findIndex(f => f.name === factionName);
+): Promise<StoredFaction | null> =>
+  runExclusive(FACTION_STORAGE_KEY, async () => {
+    const factions = await loadFactions();
+    const index = factions.findIndex(f => f.name === factionName);
 
-  if (index === -1) return null;
+    if (index === -1) return null;
 
-  // If name is being changed, check if new name already exists
-  if (updates.name && updates.name !== factionName) {
-    const nameExists = factions.some(
-      f => f.name.toLowerCase() === updates.name!.toLowerCase()
-    );
-    if (nameExists) {
-      return null; // New name already exists
-    }
-  }
-
-  const now = new Date().toISOString();
-  const oldRelationships = factions[index].relationships || [];
-
-  const updatedFaction: StoredFaction = {
-    ...factions[index],
-    ...updates,
-    updatedAt: now,
-  };
-
-  factions[index] = updatedFaction;
-
-  // Handle bidirectional relationships
-  if (updates.relationships !== undefined) {
-    const newRelationships = updates.relationships || [];
-
-    // Find relationships that were removed
-    const removedRelationships = oldRelationships.filter(
-      oldRel =>
-        !newRelationships.some(
-          newRel => newRel.factionName === oldRel.factionName
-        )
-    );
-
-    // Find relationships that were added
-    const addedRelationships = newRelationships.filter(
-      newRel =>
-        !oldRelationships.some(
-          oldRel => oldRel.factionName === newRel.factionName
-        )
-    );
-
-    // Find relationships that changed type
-    const changedRelationships = newRelationships.filter(newRel => {
-      const oldRel = oldRelationships.find(
-        oldR => oldR.factionName === newRel.factionName
+    // If name is being changed, check if new name already exists
+    if (updates.name && updates.name !== factionName) {
+      const nameExists = factions.some(
+        f => f.name.toLowerCase() === updates.name!.toLowerCase()
       );
-      return oldRel && oldRel.relationshipType !== newRel.relationshipType;
-    });
-
-    // Remove reciprocal relationships for removed relationships
-    removedRelationships.forEach(relationship => {
-      const targetFaction = factions.find(
-        f => f.name === relationship.factionName
-      );
-      if (targetFaction) {
-        targetFaction.relationships = (
-          targetFaction.relationships || []
-        ).filter(r => r.factionName !== factionName);
-        targetFaction.updatedAt = now;
+      if (nameExists) {
+        return null; // New name already exists
       }
-    });
+    }
 
-    // Add reciprocal relationships for added relationships
-    addedRelationships.forEach(relationship => {
-      const targetFaction = factions.find(
-        f => f.name === relationship.factionName
+    const now = new Date().toISOString();
+    const oldRelationships = factions[index].relationships || [];
+
+    const updatedFaction: StoredFaction = {
+      ...factions[index],
+      ...updates,
+      updatedAt: now,
+    };
+
+    factions[index] = updatedFaction;
+
+    // Handle bidirectional relationships
+    if (updates.relationships !== undefined) {
+      const newRelationships = updates.relationships || [];
+
+      // Find relationships that were removed
+      const removedRelationships = oldRelationships.filter(
+        oldRel =>
+          !newRelationships.some(
+            newRel => newRel.factionName === oldRel.factionName
+          )
       );
-      if (targetFaction) {
-        const reciprocalExists = (targetFaction.relationships || []).some(
-          r => r.factionName === factionName
+
+      // Find relationships that were added
+      const addedRelationships = newRelationships.filter(
+        newRel =>
+          !oldRelationships.some(
+            oldRel => oldRel.factionName === newRel.factionName
+          )
+      );
+
+      // Find relationships that changed type
+      const changedRelationships = newRelationships.filter(newRel => {
+        const oldRel = oldRelationships.find(
+          oldR => oldR.factionName === newRel.factionName
         );
-        if (!reciprocalExists) {
-          targetFaction.relationships = [
-            ...(targetFaction.relationships || []),
-            {
-              factionName: factionName,
-              relationshipType: relationship.relationshipType,
-            },
-          ];
+        return oldRel && oldRel.relationshipType !== newRel.relationshipType;
+      });
+
+      // Remove reciprocal relationships for removed relationships
+      removedRelationships.forEach(relationship => {
+        const targetFaction = factions.find(
+          f => f.name === relationship.factionName
+        );
+        if (targetFaction) {
+          targetFaction.relationships = (
+            targetFaction.relationships || []
+          ).filter(r => r.factionName !== factionName);
           targetFaction.updatedAt = now;
         }
-      }
-    });
+      });
 
-    // Update reciprocal relationships for changed relationships
-    changedRelationships.forEach(relationship => {
-      const targetFaction = factions.find(
-        f => f.name === relationship.factionName
-      );
-      if (targetFaction) {
-        targetFaction.relationships = (targetFaction.relationships || []).map(
-          r =>
-            r.factionName === factionName
-              ? { ...r, relationshipType: relationship.relationshipType }
-              : r
+      // Add reciprocal relationships for added relationships
+      addedRelationships.forEach(relationship => {
+        const targetFaction = factions.find(
+          f => f.name === relationship.factionName
         );
-        targetFaction.updatedAt = now;
-      }
-    });
-  }
+        if (targetFaction) {
+          const reciprocalExists = (targetFaction.relationships || []).some(
+            r => r.factionName === factionName
+          );
+          if (!reciprocalExists) {
+            targetFaction.relationships = [
+              ...(targetFaction.relationships || []),
+              {
+                factionName: factionName,
+                relationshipType: relationship.relationshipType,
+              },
+            ];
+            targetFaction.updatedAt = now;
+          }
+        }
+      });
 
-  await saveFactions(factions);
+      // Update reciprocal relationships for changed relationships
+      changedRelationships.forEach(relationship => {
+        const targetFaction = factions.find(
+          f => f.name === relationship.factionName
+        );
+        if (targetFaction) {
+          targetFaction.relationships = (targetFaction.relationships || []).map(
+            r =>
+              r.factionName === factionName
+                ? { ...r, relationshipType: relationship.relationshipType }
+                : r
+          );
+          targetFaction.updatedAt = now;
+        }
+      });
+    }
 
-  // If name changed, update all character faction references and faction relationships
-  if (updates.name && updates.name !== factionName) {
-    // Update character faction references
-    const characters = await loadCharacters();
-    const updatedCharacters = characters.map(character => {
-      const updatedFactions = character.factions.map(faction =>
-        faction.name === factionName
-          ? { ...faction, name: updates.name! }
-          : faction
-      );
-      return {
-        ...character,
-        factions: updatedFactions,
-        updatedAt: new Date().toISOString(),
-      };
-    });
-    await saveCharacters(updatedCharacters);
+    await saveFactions(factions);
 
-    // Update all faction relationships that reference the old name
-    const updatedFactions = factions.map(faction => {
-      if (faction.name === factionName) {
-        // Skip the faction being renamed (already handled above)
+    // If name changed, update all character faction references and faction relationships
+    if (updates.name && updates.name !== factionName) {
+      // Update character faction references (serialized against other character
+      // writes).
+      await runExclusive(STORAGE_KEY, async () => {
+        const characters = await loadCharacters();
+        const updatedCharacters = characters.map(character => {
+          const updatedFactions = character.factions.map(faction =>
+            faction.name === factionName
+              ? { ...faction, name: updates.name! }
+              : faction
+          );
+          return {
+            ...character,
+            factions: updatedFactions,
+            updatedAt: new Date().toISOString(),
+          };
+        });
+        await saveCharacters(updatedCharacters);
+      });
+
+      // Update all faction relationships that reference the old name
+      const updatedFactions = factions.map(faction => {
+        if (faction.name === factionName) {
+          // Skip the faction being renamed (already handled above)
+          return faction;
+        }
+        const hasRelationship = (faction.relationships || []).some(
+          r => r.factionName === factionName
+        );
+        if (hasRelationship) {
+          return {
+            ...faction,
+            relationships: (faction.relationships || []).map(r =>
+              r.factionName === factionName
+                ? { ...r, factionName: updates.name! }
+                : r
+            ),
+            updatedAt: now,
+          };
+        }
         return faction;
-      }
-      const hasRelationship = (faction.relationships || []).some(
-        r => r.factionName === factionName
-      );
-      if (hasRelationship) {
-        return {
-          ...faction,
-          relationships: (faction.relationships || []).map(r =>
-            r.factionName === factionName
-              ? { ...r, factionName: updates.name! }
-              : r
-          ),
-          updatedAt: now,
-        };
-      }
-      return faction;
-    });
-    await saveFactions(updatedFactions);
-  }
+      });
+      await saveFactions(updatedFactions);
+    }
 
-  return updatedFaction;
-};
+    return updatedFaction;
+  });
 
 export const toggleFactionRetired = async (
   factionName: string
-): Promise<boolean> => {
-  const factions = await loadFactions();
-  const index = factions.findIndex(f => f.name === factionName);
+): Promise<boolean> =>
+  runExclusive(FACTION_STORAGE_KEY, async () => {
+    const factions = await loadFactions();
+    const index = factions.findIndex(f => f.name === factionName);
 
-  if (index === -1) return false;
+    if (index === -1) return false;
 
-  factions[index] = {
-    ...factions[index],
-    retired: !factions[index].retired,
-    updatedAt: new Date().toISOString(),
-  };
+    factions[index] = {
+      ...factions[index],
+      retired: !factions[index].retired,
+      updatedAt: new Date().toISOString(),
+    };
 
-  await saveFactions(factions);
-  return true;
-};
+    await saveFactions(factions);
+    return true;
+  });
 
 // Migration function to move faction descriptions from character data to centralized storage
 export const migrateFactionDescriptions = async (): Promise<void> => {
   try {
-    const characters = await loadCharacters();
-    const existingFactions = await loadFactions();
-    const factionDescriptions = new Map<string, string>();
+    await runExclusive(FACTION_STORAGE_KEY, async () => {
+      const characters = await loadCharacters();
+      const existingFactions = await loadFactions();
+      const factionDescriptions = new Map<string, string>();
 
-    // Collect all faction descriptions from characters
-    characters.forEach(character => {
-      character.factions.forEach(faction => {
-        if (faction.description && faction.description.trim() !== '') {
-          // Use the first non-empty description found for each faction
-          if (!factionDescriptions.has(faction.name)) {
-            factionDescriptions.set(faction.name, faction.description);
+      // Collect all faction descriptions from characters
+      characters.forEach(character => {
+        character.factions.forEach(faction => {
+          if (faction.description && faction.description.trim() !== '') {
+            // Use the first non-empty description found for each faction
+            if (!factionDescriptions.has(faction.name)) {
+              factionDescriptions.set(faction.name, faction.description);
+            }
           }
+        });
+      });
+
+      // Create or update centralized faction storage
+      const updatedFactions = [...existingFactions];
+
+      factionDescriptions.forEach((description, factionName) => {
+        const existingIndex = updatedFactions.findIndex(
+          f => f.name === factionName
+        );
+        const now = new Date().toISOString();
+
+        if (existingIndex >= 0) {
+          // Update existing faction if it has no description
+          if (!updatedFactions[existingIndex].description) {
+            updatedFactions[existingIndex] = {
+              ...updatedFactions[existingIndex],
+              description,
+              updatedAt: now,
+            };
+          }
+        } else {
+          // Create new faction entry
+          updatedFactions.push({
+            name: factionName,
+            description,
+            createdAt: now,
+            updatedAt: now,
+          });
         }
       });
+
+      await saveFactions(updatedFactions);
     });
-
-    // Create or update centralized faction storage
-    const updatedFactions = [...existingFactions];
-
-    factionDescriptions.forEach((description, factionName) => {
-      const existingIndex = updatedFactions.findIndex(
-        f => f.name === factionName
-      );
-      const now = new Date().toISOString();
-
-      if (existingIndex >= 0) {
-        // Update existing faction if it has no description
-        if (!updatedFactions[existingIndex].description) {
-          updatedFactions[existingIndex] = {
-            ...updatedFactions[existingIndex],
-            description,
-            updatedAt: now,
-          };
-        }
-      } else {
-        // Create new faction entry
-        updatedFactions.push({
-          name: factionName,
-          description,
-          createdAt: now,
-          updatedAt: now,
-        });
-      }
-    });
-
-    await saveFactions(updatedFactions);
   } catch (error) {
     console.error('Error migrating faction descriptions:', error);
   }
@@ -1252,86 +1161,94 @@ export const createLocation = async (locationData: {
   description: string;
   imageUri?: string;
   imageUris?: string[];
-}): Promise<GameLocation | null> => {
-  const existingLocations = await loadLocations();
+}): Promise<GameLocation | null> =>
+  runExclusive(LOCATION_STORAGE_KEY, async () => {
+    const existingLocations = await loadLocations();
 
-  // Check if location with this name already exists
-  const existingLocation = existingLocations.find(
-    l => l.name.toLowerCase() === locationData.name.toLowerCase()
-  );
-  if (existingLocation) {
-    return null; // Location already exists
-  }
+    // Check if location with this name already exists
+    const existingLocation = existingLocations.find(
+      l => l.name.toLowerCase() === locationData.name.toLowerCase()
+    );
+    if (existingLocation) {
+      return null; // Location already exists
+    }
 
-  const now = new Date().toISOString();
-  const newLocation: GameLocation = {
-    id: uuidv4(),
-    name: locationData.name,
-    description: locationData.description,
-    imageUri: locationData.imageUri,
-    imageUris: locationData.imageUris,
-    createdAt: now,
-    updatedAt: now,
-  };
+    const now = new Date().toISOString();
+    const newLocation: GameLocation = {
+      id: uuidv4(),
+      name: locationData.name,
+      description: locationData.description,
+      imageUri: locationData.imageUri,
+      imageUris: locationData.imageUris,
+      createdAt: now,
+      updatedAt: now,
+    };
 
-  await saveLocations([...existingLocations, newLocation]);
-  return newLocation;
-};
+    await saveLocations([...existingLocations, newLocation]);
+    return newLocation;
+  });
 
 export const updateLocation = async (
   locationId: string,
   updates: Partial<Omit<GameLocation, 'id' | 'createdAt'>>
-): Promise<GameLocation | null> => {
-  const locations = await loadLocations();
-  const index = locations.findIndex(l => l.id === locationId);
+): Promise<GameLocation | null> =>
+  runExclusive(LOCATION_STORAGE_KEY, async () => {
+    const locations = await loadLocations();
+    const index = locations.findIndex(l => l.id === locationId);
 
-  if (index === -1) return null;
+    if (index === -1) return null;
 
-  const updatedLocation: GameLocation = {
-    ...locations[index],
-    ...updates,
-    updatedAt: new Date().toISOString(),
-  };
+    const updatedLocation: GameLocation = {
+      ...locations[index],
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
 
-  locations[index] = updatedLocation;
-  await saveLocations(locations);
-  return updatedLocation;
-};
+    locations[index] = updatedLocation;
+    await saveLocations(locations);
+    return updatedLocation;
+  });
 
-export const deleteLocation = async (locationId: string): Promise<boolean> => {
-  const locations = await loadLocations();
-  const filtered = locations.filter(l => l.id !== locationId);
+export const deleteLocation = async (locationId: string): Promise<boolean> =>
+  runExclusive(LOCATION_STORAGE_KEY, async () => {
+    const locations = await loadLocations();
+    const filtered = locations.filter(l => l.id !== locationId);
 
-  if (filtered.length === locations.length) return false;
+    if (filtered.length === locations.length) return false;
 
-  await saveLocations(filtered);
-  return true;
-};
+    await saveLocations(filtered);
+    return true;
+  });
 
 export const deleteLocationCompletely = async (
   locationId: string
 ): Promise<{ success: boolean; charactersUpdated: number }> => {
   try {
-    // First, remove the location reference from all characters
-    const characters = await loadCharacters();
-    let charactersUpdated = 0;
+    // First, remove the location reference from all characters (serialized
+    // against other character writes).
+    const charactersUpdated = await runExclusive(STORAGE_KEY, async () => {
+      const characters = await loadCharacters();
+      let updatedCount = 0;
 
-    const updatedCharacters = characters.map(character => {
-      if (character.locationId === locationId) {
-        charactersUpdated++;
-        return {
-          ...character,
-          locationId: undefined,
-          updatedAt: new Date().toISOString(),
-        };
+      const updatedCharacters = characters.map(character => {
+        if (character.locationId === locationId) {
+          updatedCount++;
+          return {
+            ...character,
+            locationId: undefined,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return character;
+      });
+
+      // Save updated characters if any were modified
+      if (updatedCount > 0) {
+        await saveCharacters(updatedCharacters);
       }
-      return character;
-    });
 
-    // Save updated characters if any were modified
-    if (charactersUpdated > 0) {
-      await saveCharacters(updatedCharacters);
-    }
+      return updatedCount;
+    });
 
     // Then remove the location from centralized storage
     await deleteLocation(locationId);
@@ -1378,45 +1295,48 @@ export const createEvent = async (
 
 export const addEvent = async (
   event: Omit<GameEvent, 'id' | 'createdAt' | 'updatedAt'>
-): Promise<GameEvent> => {
-  const events = await loadEvents();
-  const newEvent: GameEvent = {
-    ...event,
-    id: uuidv4(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
+): Promise<GameEvent> =>
+  runExclusive(EVENT_STORAGE_KEY, async () => {
+    const events = await loadEvents();
+    const newEvent: GameEvent = {
+      ...event,
+      id: uuidv4(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
 
-  await saveEvents([...events, newEvent]);
-  return newEvent;
-};
+    await saveEvents([...events, newEvent]);
+    return newEvent;
+  });
 
 export const updateEvent = async (
   id: string,
   updates: Partial<GameEvent>
-): Promise<GameEvent | null> => {
-  const events = await loadEvents();
-  const index = events.findIndex(e => e.id === id);
+): Promise<GameEvent | null> =>
+  runExclusive(EVENT_STORAGE_KEY, async () => {
+    const events = await loadEvents();
+    const index = events.findIndex(e => e.id === id);
 
-  if (index === -1) return null;
+    if (index === -1) return null;
 
-  const updatedEvent: GameEvent = {
-    ...events[index],
-    ...updates,
-    updatedAt: new Date().toISOString(),
-  };
+    const updatedEvent: GameEvent = {
+      ...events[index],
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
 
-  events[index] = updatedEvent;
-  await saveEvents(events);
-  return updatedEvent;
-};
+    events[index] = updatedEvent;
+    await saveEvents(events);
+    return updatedEvent;
+  });
 
-export const deleteEvent = async (id: string): Promise<boolean> => {
-  const events = await loadEvents();
-  const filtered = events.filter(e => e.id !== id);
+export const deleteEvent = async (id: string): Promise<boolean> =>
+  runExclusive(EVENT_STORAGE_KEY, async () => {
+    const events = await loadEvents();
+    const filtered = events.filter(e => e.id !== id);
 
-  if (filtered.length === events.length) return false;
+    if (filtered.length === events.length) return false;
 
-  await saveEvents(filtered);
-  return true;
-};
+    await saveEvents(filtered);
+    return true;
+  });

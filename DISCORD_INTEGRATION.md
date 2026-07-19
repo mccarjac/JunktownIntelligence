@@ -386,6 +386,7 @@ For issues or questions:
 ## Version History
 
 **Version 2.0** (Current)
+
 - Added multi-server/channel support
 - Individual server configuration management
 - Per-server sync control
@@ -394,6 +395,7 @@ For issues or questions:
 - Improved context views with channel filtering
 
 **Version 1.0**
+
 - Initial Discord integration
 - Single server/channel support
 - Basic message syncing and character mapping

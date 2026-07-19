@@ -11,7 +11,9 @@ import type { StoredFaction } from './characterStorage';
  */
 const sortCharacters = (characters: GameCharacter[]): GameCharacter[] => {
   return [...characters].sort((a, b) => {
-    const nameCompare = a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+    const nameCompare = a.name
+      .toLowerCase()
+      .localeCompare(b.name.toLowerCase());
     if (nameCompare !== 0) return nameCompare;
     return a.id.localeCompare(b.id);
   });
@@ -31,7 +33,9 @@ const sortFactions = (factions: StoredFaction[]): StoredFaction[] => {
  */
 const sortLocations = (locations: GameLocation[]): GameLocation[] => {
   return [...locations].sort((a, b) => {
-    const nameCompare = a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+    const nameCompare = a.name
+      .toLowerCase()
+      .localeCompare(b.name.toLowerCase());
     if (nameCompare !== 0) return nameCompare;
     return a.id.localeCompare(b.id);
   });
@@ -52,9 +56,7 @@ const sortEvents = (events: GameEvent[]): GameEvent[] => {
 /**
  * Sort nested arrays within a character for consistency
  */
-const sortCharacterNestedArrays = (
-  character: GameCharacter
-): GameCharacter => {
+const sortCharacterNestedArrays = (character: GameCharacter): GameCharacter => {
   const sorted = { ...character };
 
   // Sort factions by name

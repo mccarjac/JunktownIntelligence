@@ -10,7 +10,13 @@ import { RouteProp, useRoute } from '@react-navigation/native';
 import { RootStackParamList } from '@/navigation/types';
 import { DiscordMessage } from '@/models/types';
 import { getDiscordMessages } from '@/utils/discordStorage';
-import { colors, typography, spacing, borderRadius, shadows } from '@/styles/theme';
+import {
+  colors,
+  typography,
+  spacing,
+  borderRadius,
+  shadows,
+} from '@/styles/theme';
 
 type DiscordMessageContextRouteProp = RouteProp<
   RootStackParamList,
@@ -32,10 +38,10 @@ export const DiscordMessageContextScreen: React.FC = () => {
   const loadMessages = async () => {
     try {
       const allMessages = await getDiscordMessages();
-      
+
       // Filter messages to only show from the same channel/server as the target message
       const targetMessage = allMessages.find(m => m.id === messageId);
-      
+
       let contextMessages = allMessages;
       if (targetMessage && targetMessage.serverConfigId) {
         // Show only messages from the same server/channel configuration
@@ -54,7 +60,7 @@ export const DiscordMessageContextScreen: React.FC = () => {
           `[DiscordMessageContext] Filtered to ${contextMessages.length} messages from same channel (no serverConfigId)`
         );
       }
-      
+
       // Sort by timestamp (oldest first for conversation context)
       const sorted = contextMessages.sort(
         (a, b) =>
@@ -131,10 +137,13 @@ export const DiscordMessageContextScreen: React.FC = () => {
                 {new Date(msg.timestamp).toLocaleString()}
               </Text>
             </View>
-            <Text style={styles.messageContent}>{msg.content || '[No content]'}</Text>
-            {msg.images && msg.images.length > 0 && (
+            <Text style={styles.messageContent}>
+              {msg.content || '[No content]'}
+            </Text>
+            {msg.imageUris && msg.imageUris.length > 0 && (
               <Text style={styles.imageIndicator}>
-                📷 {msg.images.length} image{msg.images.length !== 1 ? 's' : ''}
+                📷 {msg.imageUris.length} image
+                {msg.imageUris.length !== 1 ? 's' : ''}
               </Text>
             )}
           </View>
