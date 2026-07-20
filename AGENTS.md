@@ -121,10 +121,10 @@ Path aliases (tsconfig + babel-plugin-module-resolver): `@/*` → `src/*`, plus
   just bare `expo`), since `expo-file-system` and `@octokit/rest` ship ESM
   and would otherwise fail to parse the moment coverage collection touches
   them.
-- Real baseline as of this writing: **~21% statements / ~21% functions**
-  (previously reported as ~75%, which only looked healthy because most of
-  `src/screens` and several `src/utils` modules were invisible to the report
-  — see the config details above).
+- Real baseline as of this writing: **~26% statements / ~26% functions**
+  (was ~21%; before that it was previously reported as ~75%, which only
+  looked healthy because most of `src/screens` and several `src/utils`
+  modules were invisible to the report — see the config details above).
 
 ### Test coverage gaps
 
@@ -135,14 +135,21 @@ blast-radius / lowest-effort first):
    **`BaseFormScreen.tsx`** (~17%) — the generic scaffolds nearly every
    detail/form screen is built on; tests here have the highest leverage per
    line written.
-2. **`src/utils/exportImport.ts`** (~1200 lines, untested) — full data
-   export/import round-trip; data-integrity critical and pure enough to test
-   well.
+2. **`src/utils/exportImport.ts`** (~11% covered) — the plain-JSON path of
+   `importCharacterData`/`mergeCharacterData` is now tested (see
+   `tst/utils/exportImport.test.ts`; note `jest.setup.js` mocks
+   `expo-file-system/legacy`, the specifier this file actually imports, not
+   bare `expo-file-system`). Still untested: `exportCharacterData` and the
+   `.zip` branches of import/merge — all need `react-native-zip-archive` +
+   directory-walking (`makeDirectoryAsync`/`copyAsync`/`getInfoAsync`/
+   `readDirectoryAsync`) + `expo-sharing` mocked.
 3. **`src/utils/gitIntegration.ts`** (~900 lines, untested) — GitHub-backed
    sync; highest blast radius, needs `@octokit` mocking.
-4. **`src/utils/discordStorage.ts`** (~700 lines, ~20% covered) — storage
-   layer, concurrency-sensitive (`runExclusive`); follow the
-   `characterStorage` mock pattern above.
+4. ~~`src/utils/discordStorage.ts`~~ — **done.** Was untested and had the
+   same unwrapped read-modify-write bug `characterStorage.ts` had (no
+   `runExclusive`); both the bug and the test gap are fixed
+   (`tst/utils/discordStorage.test.ts` +
+   `tst/utils/discordStorage.concurrency.test.ts`, ~75% covered).
 5. **`src/utils/influenceAnalysis.ts`** (~370 lines) and
    **`src/utils/factionStats.ts`** (~260 lines) — both pure computation,
    both untested; easy, high-signal unit tests.
