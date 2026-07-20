@@ -35,6 +35,10 @@ import { LocationMapScreen } from './src/screens/location/LocationMapScreen';
 import { EventsTimelineScreen } from './src/screens/events/EventsListScreen';
 import { EventsFormScreen } from './src/screens/events/EventsFormScreen';
 import { EventsDetailScreen } from './src/screens/events/EventsDetailScreen';
+import { QuestListScreen } from './src/screens/quest/QuestListScreen';
+import { QuestFormScreen } from './src/screens/quest/QuestFormScreen';
+import { QuestDetailScreen } from './src/screens/quest/QuestDetailScreen';
+import { QuestProposalScreen } from './src/screens/quest/QuestProposalScreen';
 import { InfluenceReportScreen } from './src/screens/InfluenceReportScreen';
 import { DiscordConfigScreen } from './src/screens/discord/DiscordConfigScreen';
 import { DiscordServerListScreen } from './src/screens/discord/DiscordServerListScreen';
@@ -106,6 +110,15 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
         label="Events"
         onPress={() => navigation.navigate('Events')}
         focused={isActive('Events')}
+        activeTintColor="#6C5CE7"
+        inactiveTintColor="#B8B8CC"
+        activeBackgroundColor="rgba(108, 92, 231, 0.1)"
+        labelStyle={drawerStyles.drawerLabel}
+      />
+      <DrawerItem
+        label="Quests"
+        onPress={() => navigation.navigate('Quests')}
+        focused={isActive('Quests')}
         activeTintColor="#6C5CE7"
         inactiveTintColor="#B8B8CC"
         activeBackgroundColor="rgba(108, 92, 231, 0.1)"
@@ -282,6 +295,14 @@ function MainDrawer() {
         }}
       />
       <Drawer.Screen
+        name="Quests"
+        component={QuestListScreen}
+        options={{
+          title: 'Quests',
+          drawerLabel: 'Quests',
+        }}
+      />
+      <Drawer.Screen
         name="InfluenceReport"
         component={InfluenceReportScreen}
         options={{
@@ -454,6 +475,26 @@ export default function App() {
                 name="EventsDetail"
                 component={EventsDetailScreen}
                 options={{ title: 'Event Details' }}
+              />
+              <Stack.Screen
+                name="QuestsList"
+                component={QuestListScreen}
+                options={{ title: 'Quests' }}
+              />
+              <Stack.Screen
+                name="QuestsForm"
+                component={QuestFormScreen}
+                options={{ title: 'Quest Form' }}
+              />
+              <Stack.Screen
+                name="QuestsDetail"
+                component={QuestDetailScreen}
+                options={{ title: 'Quest Details' }}
+              />
+              <Stack.Screen
+                name="QuestProposals"
+                component={QuestProposalScreen}
+                options={{ title: 'Quest Proposals' }}
               />
               <Stack.Screen
                 name="DiscordMessageContext"

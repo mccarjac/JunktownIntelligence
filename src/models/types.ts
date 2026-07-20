@@ -1,6 +1,7 @@
 import {
   AVAILABLE_PERKS,
   AVAILABLE_DISTINCTIONS,
+  type PerkTag,
   type StatModifiers,
 } from './gameData';
 import type { Species } from './speciesTypes';
@@ -134,6 +135,60 @@ export interface EventDataset {
 }
 
 export type CertaintyLevel = 'unconfirmed' | 'confirmed' | 'disputed';
+
+// Quest / Mission Management
+export enum QuestStatus {
+  NotStarted = 'NOTSTARTED',
+  Assigned = 'ASSIGNED',
+  InProgress = 'INPROGRESS',
+  Successful = 'SUCCESSFUL',
+  Failure = 'FAILURE',
+}
+
+export interface QuestMaterial {
+  id: string;
+  name: string;
+  quantityRequired: number;
+  quantityProvided: number;
+}
+
+export interface QuestAttributePreferences {
+  tags?: PerkTag[];
+  species?: Species[];
+  distinctionIds?: DistinctionId[];
+  perkIds?: PerkId[];
+}
+
+export interface GameQuest {
+  id: string;
+  name: string;
+  details?: string;
+  date?: string; // ISO date string (YYYY-MM-DD), optional time of mission
+  time?: string; // Optional time in HH:MM format
+  status: QuestStatus;
+  assignedCharacterIds?: string[]; // References to GameCharacter.id
+  desirable?: QuestAttributePreferences;
+  undesirable?: QuestAttributePreferences;
+  locationId?: string; // Reference to GameLocation.id
+  factionNames?: string[]; // Faction names related to the quest
+  eventIds?: string[]; // References to GameEvent.id
+  junktownOffice?: string; // Related Junktown office (free text)
+  requiredMaterials?: QuestMaterial[];
+  teamSize?: number; // Desired team size for proposal generation
+  notes?: string;
+  imageUri?: string; // Deprecated: Use imageUris instead
+  imageUris?: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface QuestDataset {
+  quests: GameQuest[];
+  version: string;
+  lastUpdated: string;
+}
+
+export type QuestFormData = Omit<GameQuest, 'id' | 'createdAt' | 'updatedAt'>;
 
 // Discord Integration Types
 export interface DiscordServerConfig {
