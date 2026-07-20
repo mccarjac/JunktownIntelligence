@@ -107,6 +107,62 @@ Path aliases (tsconfig + babel-plugin-module-resolver): `@/*` → `src/*`, plus
   `tst/utils/characterStorage.concurrency.test.ts` for the stateful-store
   pattern that proves serialization.
 
+### Coverage reporting
+
+- `npm run test:coverage` runs Jest with coverage; `.github/workflows/coverage.yml`
+  runs it on every PR and posts a sticky comment scoped to changed files. It is
+  **informational only** — no threshold is enforced yet, so it never blocks a PR.
+- `jest.config.js`'s `collectCoverageFrom` covers all of `src/utils`,
+  `src/components`, and `src/screens` (index files excluded) — nothing is
+  hidden from the report. Two config details matter for this to actually
+  work: `roots` must include `<rootDir>/src` (not just `<rootDir>/tst`), or
+  Jest silently omits zero-coverage rows for any file no test imports; and
+  `transformIgnorePatterns` must allow-list `expo-.*` and `@octokit` (not
+  just bare `expo`), since `expo-file-system` and `@octokit/rest` ship ESM
+  and would otherwise fail to parse the moment coverage collection touches
+  them.
+- Real baseline as of this writing: **~26% statements / ~26% functions**
+  (was ~21%; before that it was previously reported as ~75%, which only
+  looked healthy because most of `src/screens` and several `src/utils`
+  modules were invisible to the report — see the config details above).
+
+### Test coverage gaps
+
+Ranked by value if you're looking for where to add tests next (highest
+blast-radius / lowest-effort first):
+
+1. **`src/components/screens/BaseDetailScreen.tsx`** (~7%) and
+   **`BaseFormScreen.tsx`** (~17%) — the generic scaffolds nearly every
+   detail/form screen is built on; tests here have the highest leverage per
+   line written.
+2. **`src/utils/exportImport.ts`** (~11% covered) — the plain-JSON path of
+   `importCharacterData`/`mergeCharacterData` is now tested (see
+   `tst/utils/exportImport.test.ts`; note `jest.setup.js` mocks
+   `expo-file-system/legacy`, the specifier this file actually imports, not
+   bare `expo-file-system`). Still untested: `exportCharacterData` and the
+   `.zip` branches of import/merge — all need `react-native-zip-archive` +
+   directory-walking (`makeDirectoryAsync`/`copyAsync`/`getInfoAsync`/
+   `readDirectoryAsync`) + `expo-sharing` mocked.
+3. **`src/utils/gitIntegration.ts`** (~900 lines, untested) — GitHub-backed
+   sync; highest blast radius, needs `@octokit` mocking.
+4. ~~`src/utils/discordStorage.ts`~~ — **done.** Was untested and had the
+   same unwrapped read-modify-write bug `characterStorage.ts` had (no
+   `runExclusive`); both the bug and the test gap are fixed
+   (`tst/utils/discordStorage.test.ts` +
+   `tst/utils/discordStorage.concurrency.test.ts`, ~75% covered).
+5. **`src/utils/influenceAnalysis.ts`** (~370 lines) and
+   **`src/utils/factionStats.ts`** (~260 lines) — both pure computation,
+   both untested; easy, high-signal unit tests.
+6. **`src/utils/discordApi.ts`** and **`src/utils/discordCharacterExtraction.ts`**
+   (untested) — parsing/ingesting external Discord data; boundary-parsing
+   bugs are likely here.
+7. **Every detail/form screen, and the whole `src/screens/discord/`,
+   `src/screens/events/`, and `src/screens/location/` folders** — entirely
+   untested (0%). Only the `*ListScreen` components have tests
+   (`tst/screens/character/CharacterListScreen.test.tsx`,
+   `tst/screens/faction/FactionListScreen.test.tsx`); use those as the
+   template.
+
 ## Scope discipline
 
 Prefer reusing existing utilities over adding new ones. Data-storage format

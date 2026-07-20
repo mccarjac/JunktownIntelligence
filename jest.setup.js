@@ -10,8 +10,12 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 // Mock expo modules
-jest.mock('expo-file-system', () => ({
+// NOTE: exportImport.ts, gitIntegration.ts, and discordApi.ts all import
+// `expo-file-system/legacy`, not bare `expo-file-system` — mock the specifier
+// that's actually used, or the real (native-backed) module loads instead.
+jest.mock('expo-file-system/legacy', () => ({
   documentDirectory: 'file://mock-document-directory/',
+  cacheDirectory: 'file://mock-cache-directory/',
   writeAsStringAsync: jest.fn(),
   readAsStringAsync: jest.fn(),
   deleteAsync: jest.fn(),
