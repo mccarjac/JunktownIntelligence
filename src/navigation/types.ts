@@ -1,4 +1,9 @@
-import { GameCharacter, GameLocation, GameEvent } from '@models/types';
+import {
+  GameCharacter,
+  GameLocation,
+  GameEvent,
+  GameQuest,
+} from '@models/types';
 
 export type RootDrawerParamList = {
   CharacterList: undefined;
@@ -6,6 +11,7 @@ export type RootDrawerParamList = {
   Factions: undefined;
   Locations: undefined;
   Events: undefined;
+  Quests: undefined;
   InfluenceReport: undefined;
   DiscordConfig: undefined;
   DiscordServers: undefined;
@@ -31,6 +37,10 @@ export type RootStackParamList = {
   EventsTimeline: undefined;
   EventsForm: { event?: GameEvent };
   EventsDetail: { eventId: string };
+  QuestsList: undefined;
+  QuestsForm: { quest?: GameQuest };
+  QuestsDetail: { questId: string };
+  QuestProposals: undefined;
   DiscordMessageContext: { messageId: string; characterId?: string };
   DiscordServerForm: { serverConfigId?: string };
 };

@@ -5,6 +5,8 @@ import {
   LocationDataset,
   GameEvent,
   EventDataset,
+  GameQuest,
+  QuestDataset,
   RelationshipStanding,
 } from '@models/types';
 import { v4 as uuidv4 } from 'uuid';
@@ -40,6 +42,7 @@ const STORAGE_KEY = 'gameCharacterManager';
 const FACTION_STORAGE_KEY = 'gameCharacterManager_factions';
 const LOCATION_STORAGE_KEY = 'gameCharacterManager_locations';
 const EVENT_STORAGE_KEY = 'gameCharacterManager_events';
+const QUEST_STORAGE_KEY = 'gameCharacterManager_quests';
 
 export const saveCharacters = async (
   characters: GameCharacter[]
@@ -130,6 +133,8 @@ export const exportDataset = async (): Promise<string> => {
     );
   const eventData =
     await SafeAsyncStorageJSONParser.getItem<EventDataset>(EVENT_STORAGE_KEY);
+  const questData =
+    await SafeAsyncStorageJSONParser.getItem<QuestDataset>(QUEST_STORAGE_KEY);
 
   const characters = characterData || {
     characters: [],
@@ -147,6 +152,7 @@ export const exportDataset = async (): Promise<string> => {
     lastUpdated: '',
   };
   const events = eventData || { events: [], version: '1.0', lastUpdated: '' };
+  const quests = questData || { quests: [], version: '1.0', lastUpdated: '' };
 
   // Export Discord data
   const discordData = await exportDiscordDataset();
@@ -156,6 +162,7 @@ export const exportDataset = async (): Promise<string> => {
     factions: factions.factions || [],
     locations: locations.locations || [],
     events: events.events || [],
+    quests: quests.quests || [],
     discord: discordData,
     version: '1.0',
     lastUpdated: new Date().toISOString(),
@@ -330,6 +337,16 @@ export const importDataset = async (jsonData: string): Promise<boolean> => {
         lastUpdated: dataset.lastUpdated || new Date().toISOString(),
       };
       await SafeAsyncStorageJSONParser.setItem(EVENT_STORAGE_KEY, eventDataset);
+    }
+
+    // Handle quest data if present
+    if (dataset.quests) {
+      const questDataset: QuestDataset = {
+        quests: dataset.quests,
+        version: dataset.version || '1.0',
+        lastUpdated: dataset.lastUpdated || new Date().toISOString(),
+      };
+      await SafeAsyncStorageJSONParser.setItem(QUEST_STORAGE_KEY, questDataset);
     }
 
     // Import Discord data if present
@@ -688,6 +705,7 @@ export const clearStorage = async (): Promise<void> => {
   await SafeAsyncStorageJSONParser.removeItem(FACTION_STORAGE_KEY);
   await SafeAsyncStorageJSONParser.removeItem(LOCATION_STORAGE_KEY);
   await SafeAsyncStorageJSONParser.removeItem(EVENT_STORAGE_KEY);
+  await SafeAsyncStorageJSONParser.removeItem(QUEST_STORAGE_KEY);
 };
 
 // Faction management functions
@@ -1338,5 +1356,80 @@ export const deleteEvent = async (id: string): Promise<boolean> =>
     if (filtered.length === events.length) return false;
 
     await saveEvents(filtered);
+    return true;
+  });
+
+// ============================================
+// Quest Storage Functions
+// ============================================
+
+export const saveQuests = async (quests: GameQuest[]): Promise<void> => {
+  const dataset: QuestDataset = {
+    quests,
+    version: '1.0',
+    lastUpdated: new Date().toISOString(),
+  };
+  await SafeAsyncStorageJSONParser.setItem(QUEST_STORAGE_KEY, dataset);
+};
+
+export const loadQuests = async (): Promise<GameQuest[]> => {
+  const dataset =
+    await SafeAsyncStorageJSONParser.getItem<QuestDataset>(QUEST_STORAGE_KEY);
+  if (!dataset) return [];
+
+  return dataset.quests || [];
+};
+
+export const createQuest = async (
+  quest: Omit<GameQuest, 'id' | 'createdAt' | 'updatedAt'>
+): Promise<GameQuest> => {
+  return await addQuest(quest);
+};
+
+export const addQuest = async (
+  quest: Omit<GameQuest, 'id' | 'createdAt' | 'updatedAt'>
+): Promise<GameQuest> =>
+  runExclusive(QUEST_STORAGE_KEY, async () => {
+    const quests = await loadQuests();
+    const newQuest: GameQuest = {
+      ...quest,
+      id: uuidv4(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    await saveQuests([...quests, newQuest]);
+    return newQuest;
+  });
+
+export const updateQuest = async (
+  id: string,
+  updates: Partial<GameQuest>
+): Promise<GameQuest | null> =>
+  runExclusive(QUEST_STORAGE_KEY, async () => {
+    const quests = await loadQuests();
+    const index = quests.findIndex(q => q.id === id);
+
+    if (index === -1) return null;
+
+    const updatedQuest: GameQuest = {
+      ...quests[index],
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+
+    quests[index] = updatedQuest;
+    await saveQuests(quests);
+    return updatedQuest;
+  });
+
+export const deleteQuest = async (id: string): Promise<boolean> =>
+  runExclusive(QUEST_STORAGE_KEY, async () => {
+    const quests = await loadQuests();
+    const filtered = quests.filter(q => q.id !== id);
+
+    if (filtered.length === quests.length) return false;
+
+    await saveQuests(filtered);
     return true;
   });

@@ -25,6 +25,11 @@ import {
   createEvent,
   updateEvent,
   deleteEvent,
+  saveQuests,
+  loadQuests,
+  createQuest,
+  updateQuest,
+  deleteQuest,
   type StoredFaction,
 } from '@/utils/characterStorage';
 import * as CharacterStorage from '@/utils/characterStorage';
@@ -33,6 +38,8 @@ import {
   GameCharacter,
   GameLocation,
   GameEvent,
+  GameQuest,
+  QuestStatus,
   RelationshipStanding,
   Faction,
 } from '@/models/types';
@@ -1015,12 +1022,142 @@ describe('characterStorage', () => {
     });
   });
 
+  describe('Quest Operations', () => {
+    const mockQuest: GameQuest = {
+      id: 'quest-1',
+      name: 'Test Quest',
+      status: QuestStatus.NotStarted,
+      createdAt: mockDate,
+      updatedAt: mockDate,
+    };
+
+    describe('loadQuests', () => {
+      it('should return empty array when no quests exist', async () => {
+        (SafeAsyncStorageJSONParser.getItem as jest.Mock).mockResolvedValue(
+          null
+        );
+
+        const result = await loadQuests();
+
+        expect(result).toEqual([]);
+      });
+
+      it('should return quests from storage', async () => {
+        const mockDataset = {
+          quests: [mockQuest],
+          version: '1.0',
+          lastUpdated: mockDate,
+        };
+        (SafeAsyncStorageJSONParser.getItem as jest.Mock).mockResolvedValue(
+          mockDataset
+        );
+
+        const result = await loadQuests();
+
+        expect(result).toEqual([mockQuest]);
+      });
+    });
+
+    describe('saveQuests', () => {
+      it('should save quests with proper dataset structure', async () => {
+        const quests = [mockQuest];
+
+        await saveQuests(quests);
+
+        expect(SafeAsyncStorageJSONParser.setItem).toHaveBeenCalledWith(
+          'gameCharacterManager_quests',
+          {
+            quests,
+            version: '1.0',
+            lastUpdated: mockDate,
+          }
+        );
+      });
+    });
+
+    describe('createQuest', () => {
+      it('should create a new quest with generated ID', async () => {
+        (SafeAsyncStorageJSONParser.getItem as jest.Mock).mockResolvedValue({
+          quests: [],
+          version: '1.0',
+          lastUpdated: mockDate,
+        });
+
+        const newQuestData = {
+          name: 'New Quest',
+          status: QuestStatus.NotStarted,
+        };
+
+        const result = await createQuest(newQuestData);
+
+        expect(result).not.toBeNull();
+        expect(result?.id).toBe('mock-uuid-1234');
+        expect(result?.name).toBe('New Quest');
+        expect(result?.createdAt).toBe(mockDate);
+        expect(result?.updatedAt).toBe(mockDate);
+      });
+    });
+
+    describe('updateQuest', () => {
+      it('should update existing quest', async () => {
+        (SafeAsyncStorageJSONParser.getItem as jest.Mock).mockResolvedValue({
+          quests: [mockQuest],
+          version: '1.0',
+          lastUpdated: mockDate,
+        });
+
+        const result = await updateQuest('quest-1', { name: 'Updated Quest' });
+
+        expect(result).not.toBeNull();
+        expect(result?.name).toBe('Updated Quest');
+      });
+
+      it('should return null for non-existent quest', async () => {
+        (SafeAsyncStorageJSONParser.getItem as jest.Mock).mockResolvedValue({
+          quests: [],
+          version: '1.0',
+          lastUpdated: mockDate,
+        });
+
+        const result = await updateQuest('non-existent', { name: 'Test' });
+
+        expect(result).toBeNull();
+      });
+    });
+
+    describe('deleteQuest', () => {
+      it('should delete existing quest', async () => {
+        (SafeAsyncStorageJSONParser.getItem as jest.Mock).mockResolvedValue({
+          quests: [mockQuest],
+          version: '1.0',
+          lastUpdated: mockDate,
+        });
+
+        const result = await deleteQuest('quest-1');
+
+        expect(result).toBe(true);
+      });
+
+      it('should return false for non-existent quest', async () => {
+        (SafeAsyncStorageJSONParser.getItem as jest.Mock).mockResolvedValue({
+          quests: [],
+          version: '1.0',
+          lastUpdated: mockDate,
+        });
+
+        const result = await deleteQuest('non-existent');
+
+        expect(result).toBe(false);
+      });
+    });
+  });
+
   describe('Storage Management', () => {
     describe('clearStorage', () => {
       it('should remove all storage keys', async () => {
         await clearStorage();
 
-        expect(SafeAsyncStorageJSONParser.removeItem).toHaveBeenCalledTimes(4);
+        expect(SafeAsyncStorageJSONParser.removeItem).toHaveBeenCalledTimes(5);
         expect(SafeAsyncStorageJSONParser.removeItem).toHaveBeenCalledWith(
           'gameCharacterManager'
         );
@@ -1032,6 +1169,9 @@ describe('characterStorage', () => {
         );
         expect(SafeAsyncStorageJSONParser.removeItem).toHaveBeenCalledWith(
           'gameCharacterManager_events'
+        );
+        expect(SafeAsyncStorageJSONParser.removeItem).toHaveBeenCalledWith(
+          'gameCharacterManager_quests'
         );
       });
     });
