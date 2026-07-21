@@ -1,61 +1,28 @@
 import React from 'react';
-import { render, waitFor } from '@testing-library/react-native';
+import { render } from '@testing-library/react-native';
 import { FactionListScreen } from '@screens/faction/FactionListScreen';
-import * as characterStorage from '@utils/characterStorage';
+import { describeListScreenContract } from '../../helpers/screenContracts';
+import { getStorageMock } from '../../helpers/storage';
+import { makeStoredFaction } from '../../helpers/factories';
 
-// Mock the character storage module
-jest.mock('@utils/characterStorage', () => ({
-  loadFactions: jest.fn(),
-  loadCharacters: jest.fn(),
-  migrateFactionDescriptions: jest.fn(),
-  getFactionDescription: jest.fn(),
-}));
+jest.mock('@utils/characterStorage');
 
-describe('FactionListScreen', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
+const storage = getStorageMock();
 
-  it('should render without crashing', async () => {
-    (characterStorage.loadFactions as jest.Mock).mockResolvedValue([]);
-    (characterStorage.loadCharacters as jest.Mock).mockResolvedValue([]);
-
-    const { getByText } = render(<FactionListScreen />);
-
-    await waitFor(() => {
-      expect(getByText('No factions found')).toBeTruthy();
-    });
-  });
-
-  it('should load factions on mount', async () => {
-    const mockFactions = [
-      {
-        id: '1',
-        name: 'Test Faction',
-        members: [],
-      },
-    ];
-
-    (characterStorage.loadFactions as jest.Mock).mockResolvedValue(
-      mockFactions
-    );
-    (characterStorage.loadCharacters as jest.Mock).mockResolvedValue([]);
-
-    render(<FactionListScreen />);
-
-    await waitFor(() => {
-      expect(characterStorage.loadFactions).toHaveBeenCalled();
-    });
-  });
-
-  it('should display search input', async () => {
-    (characterStorage.loadFactions as jest.Mock).mockResolvedValue([]);
-    (characterStorage.loadCharacters as jest.Mock).mockResolvedValue([]);
-
-    const { getByPlaceholderText } = render(<FactionListScreen />);
-
-    await waitFor(() => {
-      expect(getByPlaceholderText('Search factions by name...')).toBeTruthy();
-    });
-  });
+describeListScreenContract({
+  name: 'FactionListScreen',
+  renderScreen: () => render(<FactionListScreen />),
+  emptyStateTitle: 'No factions found',
+  searchPlaceholder: 'Search factions by name...',
+  loadFns: () => [
+    storage.migrateFactionDescriptions,
+    storage.loadCharacters,
+    storage.loadFactions,
+  ],
+  primePopulated: () => {
+    storage.loadFactions.mockResolvedValue([
+      makeStoredFaction({ name: 'Iron Legion' }),
+    ]);
+  },
+  populatedTexts: ['Iron Legion'],
 });

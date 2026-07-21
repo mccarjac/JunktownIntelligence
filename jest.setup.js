@@ -31,6 +31,7 @@ jest.mock('expo-document-picker', () => ({
 
 jest.mock('expo-image-picker', () => ({
   launchImageLibraryAsync: jest.fn(),
+  requestMediaLibraryPermissionsAsync: jest.fn(),
   MediaTypeOptions: {
     Images: 'Images',
   },
@@ -99,9 +100,10 @@ jest.mock('react-native-reanimated', () => ({
 // Global __DEV__ variable for development checks
 global.__DEV__ = false;
 
-// Suppress console warnings in tests
+// Suppress console output in tests (some screens log lifecycle debug info)
 global.console = {
   ...console,
+  log: jest.fn(),
   warn: jest.fn(),
   error: jest.fn(),
 };
