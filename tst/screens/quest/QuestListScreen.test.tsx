@@ -1,57 +1,24 @@
 import React from 'react';
-import { render, waitFor } from '@testing-library/react-native';
+import { render } from '@testing-library/react-native';
 import { QuestListScreen } from '@screens/quest/QuestListScreen';
-import * as characterStorage from '@utils/characterStorage';
-import { QuestStatus } from '@models/types';
+import { describeListScreenContract } from '../../helpers/screenContracts';
+import { getStorageMock } from '../../helpers/storage';
+import { makeQuest } from '../../helpers/factories';
 
-// Mock the character storage module
-jest.mock('@utils/characterStorage', () => ({
-  loadQuests: jest.fn(),
-}));
+jest.mock('@utils/characterStorage');
 
-describe('QuestListScreen', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
+const storage = getStorageMock();
 
-  it('should render without crashing', async () => {
-    (characterStorage.loadQuests as jest.Mock).mockResolvedValue([]);
-
-    const { getByText } = render(<QuestListScreen />);
-
-    await waitFor(() => {
-      expect(getByText('No quests found')).toBeTruthy();
-    });
-  });
-
-  it('should load quests on mount', async () => {
-    const mockQuests = [
-      {
-        id: 'quest-1',
-        name: 'Test Quest',
-        status: QuestStatus.NotStarted,
-        createdAt: '2025-01-01T00:00:00.000Z',
-        updatedAt: '2025-01-01T00:00:00.000Z',
-      },
-    ];
-
-    (characterStorage.loadQuests as jest.Mock).mockResolvedValue(mockQuests);
-
-    const { getByText } = render(<QuestListScreen />);
-
-    await waitFor(() => {
-      expect(characterStorage.loadQuests).toHaveBeenCalled();
-      expect(getByText('Test Quest')).toBeTruthy();
-    });
-  });
-
-  it('should display search input', async () => {
-    (characterStorage.loadQuests as jest.Mock).mockResolvedValue([]);
-
-    const { getByPlaceholderText } = render(<QuestListScreen />);
-
-    await waitFor(() => {
-      expect(getByPlaceholderText('Search quests by name...')).toBeTruthy();
-    });
-  });
+describeListScreenContract({
+  name: 'QuestListScreen',
+  renderScreen: () => render(<QuestListScreen />),
+  emptyStateTitle: 'No quests found',
+  searchPlaceholder: 'Search quests by name...',
+  loadFns: () => [storage.loadQuests],
+  primePopulated: () => {
+    storage.loadQuests.mockResolvedValue([
+      makeQuest({ name: 'Recover the Cargo' }),
+    ]);
+  },
+  populatedTexts: ['Recover the Cargo'],
 });

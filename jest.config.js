@@ -6,8 +6,10 @@ module.exports = {
   // transformed instead of failing to parse — this only matters once
   // coverage collection actually loads files like exportImport.ts and
   // gitIntegration.ts that were previously excluded from the report.
+  // `uuid` ships ESM-only and must be transformed so test files can automock
+  // modules that import it (e.g. `jest.mock('@utils/characterStorage')`).
   transformIgnorePatterns: [
-    'node_modules/(?!(react-native|@react-native|@react-navigation|expo|expo-.*|@expo|@unimodules|@octokit|react-native-.*)/)',
+    'node_modules/(?!(react-native|@react-native|@react-navigation|expo|expo-.*|@expo|@unimodules|@octokit|react-native-.*|uuid)/)',
   ],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
   moduleNameMapper: {

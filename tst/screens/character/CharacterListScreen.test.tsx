@@ -1,60 +1,40 @@
 import React from 'react';
-import { render, waitFor } from '@testing-library/react-native';
+import { render } from '@testing-library/react-native';
 import { CharacterListScreen } from '@screens/character/CharacterListScreen';
-import * as characterStorage from '@utils/characterStorage';
+import { RelationshipStanding } from '@models/types';
+import { describeListScreenContract } from '../../helpers/screenContracts';
+import { getStorageMock } from '../../helpers/storage';
+import { makeCharacter } from '../../helpers/factories';
 
-// Mock the character storage module
-jest.mock('@utils/characterStorage', () => ({
-  loadCharacters: jest.fn(),
-  toggleCharacterPresent: jest.fn(),
-  resetAllPresentStatus: jest.fn(),
-}));
+jest.mock('@utils/characterStorage');
 
-describe('CharacterListScreen', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
+const storage = getStorageMock();
 
-  it('should render without crashing', async () => {
-    (characterStorage.loadCharacters as jest.Mock).mockResolvedValue([]);
-
-    const { getByText } = render(<CharacterListScreen />);
-
-    await waitFor(() => {
-      expect(getByText('No characters found')).toBeTruthy();
-    });
-  });
-
-  it('should load characters on mount', async () => {
-    const mockCharacters = [
-      {
-        id: '1',
-        name: 'Test Character',
-        species: 'Human',
-        factionId: 'faction1',
-        stats: {},
-        skills: {},
-      },
-    ];
-
-    (characterStorage.loadCharacters as jest.Mock).mockResolvedValue(
-      mockCharacters
-    );
-
-    render(<CharacterListScreen />);
-
-    await waitFor(() => {
-      expect(characterStorage.loadCharacters).toHaveBeenCalled();
-    });
-  });
-
-  it('should display search input', async () => {
-    (characterStorage.loadCharacters as jest.Mock).mockResolvedValue([]);
-
-    const { getByPlaceholderText } = render(<CharacterListScreen />);
-
-    await waitFor(() => {
-      expect(getByPlaceholderText('Search characters by name...')).toBeTruthy();
-    });
-  });
+describeListScreenContract({
+  name: 'CharacterListScreen',
+  renderScreen: () => render(<CharacterListScreen />),
+  emptyStateTitle: 'No characters found',
+  searchPlaceholder: 'Search characters by name...',
+  loadFns: () => [storage.loadCharacters],
+  primePopulated: () => {
+    storage.loadCharacters.mockResolvedValue([
+      makeCharacter({
+        id: 'char-1',
+        name: 'Alice',
+        present: true,
+        factions: [
+          { name: 'Iron Legion', standing: RelationshipStanding.Ally },
+        ],
+      }),
+      makeCharacter({ id: 'char-2', name: 'Bob' }),
+    ]);
+  },
+  populatedTexts: [
+    'Alice',
+    'Present',
+    'Iron Legion',
+    'Bob',
+    'Absent',
+    'No factions',
+  ],
 });
