@@ -6,6 +6,7 @@ import {
 } from '@models/types';
 
 export type RootDrawerParamList = {
+  GlobalSearch: undefined;
   CharacterList: undefined;
   DataManagement: undefined;
   Factions: undefined;
