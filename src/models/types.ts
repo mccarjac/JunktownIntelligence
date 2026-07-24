@@ -120,6 +120,7 @@ export interface GameEvent {
   locationId?: string; // Reference to GameLocation.id
   characterIds?: string[]; // References to GameCharacter.id
   factionNames?: string[]; // Faction names involved in the event
+  questIds?: string[]; // References to GameQuest.id
   notes?: string;
   imageUri?: string; // Deprecated: Use imageUris instead
   imageUris?: string[];

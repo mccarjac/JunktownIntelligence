@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
 import { GameQuest, QuestStatus } from '@models/types';
-import { loadQuests } from '@utils/characterStorage';
+import { loadQuests, reconcileQuestEventLinks } from '@utils/characterStorage';
 import {
   useNavigation,
   useFocusEffect,
@@ -54,6 +54,9 @@ export const QuestListScreen: React.FC = () => {
   const navigation = useNavigation<QuestListNavigationProp>();
 
   const loadData = useCallback(async () => {
+    // Backfill/prune quest<->event back-references (idempotent operation)
+    await reconcileQuestEventLinks();
+
     const questsData = await loadQuests();
     setQuests([...questsData].sort((a, b) => a.name.localeCompare(b.name)));
   }, []);

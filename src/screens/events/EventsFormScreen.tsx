@@ -18,10 +18,16 @@ import {
   loadCharacters,
   loadLocations,
   loadFactions,
+  loadQuests,
 } from '@utils/characterStorage';
 import { colors as themeColors } from '@/styles/theme';
 import { Picker } from '@react-native-picker/picker';
-import { GameCharacter, GameLocation, CertaintyLevel } from '@models/types';
+import {
+  GameCharacter,
+  GameLocation,
+  GameQuest,
+  CertaintyLevel,
+} from '@models/types';
 import { BaseFormScreen } from '@/components';
 
 type EventsFormNavigationProp = StackNavigationProp<
@@ -39,6 +45,7 @@ interface EventFormData {
   locationId: string;
   characterIds: string[];
   factionNames: string[];
+  questIds: string[];
   notes: string;
   imageUri?: string;
   imageUris?: string[];
@@ -65,6 +72,7 @@ export const EventsFormScreen: React.FC = () => {
     locationId: '',
     characterIds: [],
     factionNames: [],
+    questIds: [],
     notes: '',
     imageUri: undefined,
     imageUris: [],
@@ -76,12 +84,18 @@ export const EventsFormScreen: React.FC = () => {
   const [characters, setCharacters] = useState<GameCharacter[]>([]);
   const [locations, setLocations] = useState<GameLocation[]>([]);
   const [factions, setFactions] = useState<string[]>([]);
+  const [quests, setQuests] = useState<GameQuest[]>([]);
 
-  // Load characters, locations, and factions
+  // Load characters, locations, factions, and quests
   useEffect(() => {
     const loadData = async () => {
-      const [loadedCharacters, loadedLocations, loadedFactions] =
-        await Promise.all([loadCharacters(), loadLocations(), loadFactions()]);
+      const [loadedCharacters, loadedLocations, loadedFactions, loadedQuests] =
+        await Promise.all([
+          loadCharacters(),
+          loadLocations(),
+          loadFactions(),
+          loadQuests(),
+        ]);
       setCharacters(
         loadedCharacters.sort((a, b) => a.name.localeCompare(b.name))
       );
@@ -95,6 +109,7 @@ export const EventsFormScreen: React.FC = () => {
           .map(f => f.name)
           .sort()
       );
+      setQuests(loadedQuests.sort((a, b) => a.name.localeCompare(b.name)));
     };
     loadData();
   }, []);
@@ -110,6 +125,7 @@ export const EventsFormScreen: React.FC = () => {
         locationId: event.locationId || '',
         characterIds: event.characterIds || [],
         factionNames: event.factionNames || [],
+        questIds: event.questIds || [],
         notes: event.notes || '',
         imageUri: event.imageUri,
         imageUris: event.imageUris || (event.imageUri ? [event.imageUri] : []),
@@ -189,6 +205,22 @@ export const EventsFormScreen: React.FC = () => {
     setFormData({
       ...formData,
       factionNames: formData.factionNames.filter(f => f !== faction),
+    });
+  };
+
+  const addQuest = (questId: string) => {
+    if (questId && !formData.questIds.includes(questId)) {
+      setFormData({
+        ...formData,
+        questIds: [...formData.questIds, questId],
+      });
+    }
+  };
+
+  const removeQuest = (questId: string) => {
+    setFormData({
+      ...formData,
+      questIds: formData.questIds.filter(id => id !== questId),
     });
   };
 
@@ -400,6 +432,45 @@ export const EventsFormScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
           ))}
+        </View>
+      </View>
+
+      {/* Quests */}
+      <View style={styles.section}>
+        <Text style={styles.label}>Related Quests</Text>
+        <View style={styles.pickerContainer}>
+          <Picker
+            selectedValue=""
+            onValueChange={addQuest}
+            style={styles.picker}
+            dropdownIconColor={themeColors.text.secondary}
+          >
+            <Picker.Item label="Select quest to add..." value="" />
+            {quests
+              .filter(q => !formData.questIds.includes(q.id))
+              .map(quest => (
+                <Picker.Item
+                  key={quest.id}
+                  label={quest.name}
+                  value={quest.id}
+                />
+              ))}
+          </Picker>
+        </View>
+        <View style={styles.selectedList}>
+          {formData.questIds.map(questId => {
+            const quest = quests.find(q => q.id === questId);
+            return (
+              <View key={questId} style={styles.selectedChip}>
+                <Text style={styles.selectedChipText}>
+                  {quest?.name ?? 'Unknown'}
+                </Text>
+                <TouchableOpacity onPress={() => removeQuest(questId)}>
+                  <Text style={styles.removeButton}>×</Text>
+                </TouchableOpacity>
+              </View>
+            );
+          })}
         </View>
       </View>
 

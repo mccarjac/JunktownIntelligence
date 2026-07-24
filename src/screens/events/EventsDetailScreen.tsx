@@ -1,5 +1,12 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Alert, Image } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Alert,
+  Image,
+  TouchableOpacity,
+} from 'react-native';
 import {
   useNavigation,
   useRoute,
@@ -12,13 +19,22 @@ import {
   loadEvents,
   loadCharacters,
   loadLocations,
+  loadQuests,
   deleteEvent,
 } from '@utils/characterStorage';
-import { GameEvent } from '@models/types';
+import { GameEvent, QuestStatus } from '@models/types';
 import { colors as themeColors } from '@/styles/theme';
 import { BaseDetailScreen, Section, CollapsibleSection } from '@/components';
 import Markdown from 'react-native-markdown-display';
 import { formatEventDate } from '@utils/dateUtils';
+
+const QUEST_STATUS_LABELS: Record<QuestStatus, string> = {
+  [QuestStatus.NotStarted]: 'Not Started',
+  [QuestStatus.Assigned]: 'Assigned',
+  [QuestStatus.InProgress]: 'In Progress',
+  [QuestStatus.Successful]: 'Successful',
+  [QuestStatus.Failure]: 'Failure',
+};
 
 type EventsDetailNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -27,9 +43,16 @@ type EventsDetailNavigationProp = StackNavigationProp<
 
 type EventsDetailRouteProp = RouteProp<RootStackParamList, 'EventsDetail'>;
 
+interface EventQuestInfo {
+  id: string;
+  name: string;
+  status: QuestStatus;
+}
+
 interface EventWithDetails extends GameEvent {
   locationName?: string;
   characterNames: string[];
+  quests: EventQuestInfo[];
 }
 
 export const EventsDetailScreen: React.FC = () => {
@@ -40,9 +63,12 @@ export const EventsDetailScreen: React.FC = () => {
   const [event, setEvent] = useState<EventWithDetails | null>(null);
 
   const loadEventDetails = useCallback(async () => {
-    const events = await loadEvents();
-    const characters = await loadCharacters();
-    const locations = await loadLocations();
+    const [events, characters, locations, quests] = await Promise.all([
+      loadEvents(),
+      loadCharacters(),
+      loadLocations(),
+      loadQuests(),
+    ]);
 
     const foundEvent = events.find(e => e.id === eventId);
     if (!foundEvent) {
@@ -55,6 +81,7 @@ export const EventsDetailScreen: React.FC = () => {
     // Create lookup maps
     const locationMap = new Map(locations.map(l => [l.id, l.name]));
     const characterMap = new Map(characters.map(c => [c.id, c.name]));
+    const questMap = new Map(quests.map(q => [q.id, q]));
 
     const eventWithDetails: EventWithDetails = {
       ...foundEvent,
@@ -64,6 +91,15 @@ export const EventsDetailScreen: React.FC = () => {
       characterNames:
         foundEvent.characterIds?.map(id => characterMap.get(id) || 'Unknown') ||
         [],
+      quests:
+        foundEvent.questIds
+          ?.map(id => questMap.get(id))
+          .filter((quest): quest is NonNullable<typeof quest> => Boolean(quest))
+          .map(quest => ({
+            id: quest.id,
+            name: quest.name,
+            status: quest.status,
+          })) || [],
     };
 
     setEvent(eventWithDetails);
@@ -183,6 +219,28 @@ export const EventsDetailScreen: React.FC = () => {
                 <Text style={styles.listBullet}>•</Text>
                 <Text style={styles.listText}>{name}</Text>
               </View>
+            ))}
+          </View>
+        </CollapsibleSection>
+      )}
+
+      {/* Quests - Using CollapsibleSection */}
+      {event.quests.length > 0 && (
+        <CollapsibleSection title="Quests">
+          <View style={styles.list}>
+            {event.quests.map(quest => (
+              <TouchableOpacity
+                key={quest.id}
+                style={styles.questRow}
+                onPress={() =>
+                  navigation.navigate('QuestsDetail', { questId: quest.id })
+                }
+              >
+                <Text style={styles.listText}>{quest.name}</Text>
+                <Text style={styles.questStatus}>
+                  {QUEST_STATUS_LABELS[quest.status]}
+                </Text>
+              </TouchableOpacity>
             ))}
           </View>
         </CollapsibleSection>
@@ -320,6 +378,15 @@ const styles = StyleSheet.create({
   overviewValue: {
     flex: 1,
     flexWrap: 'wrap',
+  },
+  questRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  questStatus: {
+    fontSize: 14,
+    color: themeColors.text.muted,
   },
 });
 

@@ -6,6 +6,7 @@ import {
   loadCharacters,
   loadLocations,
   loadFactions,
+  reconcileQuestEventLinks,
 } from '@utils/characterStorage';
 import {
   useNavigation,
@@ -47,6 +48,9 @@ export const EventsTimelineScreen: React.FC = () => {
   const navigation = useNavigation<EventsNavigationProp>();
 
   const loadData = useCallback(async () => {
+    // Backfill/prune quest<->event back-references (idempotent operation)
+    await reconcileQuestEventLinks();
+
     const eventsData = await loadEvents();
     const charactersData = await loadCharacters();
     const locationsData = await loadLocations();
