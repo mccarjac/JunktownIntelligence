@@ -19,5 +19,15 @@ module.exports = function (api) {
       ],
       'react-native-reanimated/plugin',
     ],
+    env: {
+      // Jest runs under CommonJS without --experimental-vm-modules, so the
+      // native `import()` calls left untouched by babel-preset-expo (e.g.
+      // influenceAnalysis.ts's lazy `@utils/characterStorage` import) need
+      // to be lowered to `require()` only for tests; Metro/production
+      // builds are unaffected.
+      test: {
+        plugins: ['babel-plugin-dynamic-import-node'],
+      },
+    },
   };
 };

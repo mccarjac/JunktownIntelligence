@@ -121,8 +121,8 @@ Path aliases (tsconfig + babel-plugin-module-resolver): `@/*` → `src/*`, plus
   just bare `expo`), since `expo-file-system` and `@octokit/rest` ship ESM
   and would otherwise fail to parse the moment coverage collection touches
   them.
-- Real baseline as of this writing: **~26% statements / ~26% functions**
-  (was ~21%; before that it was previously reported as ~75%, which only
+- Real baseline as of this writing: **~54% statements / ~51% functions**
+  (was ~26%; before that it was previously reported as ~75%, which only
   looked healthy because most of `src/screens` and several `src/utils`
   modules were invisible to the report — see the config details above).
 
@@ -131,11 +131,7 @@ Path aliases (tsconfig + babel-plugin-module-resolver): `@/*` → `src/*`, plus
 Ranked by value if you're looking for where to add tests next (highest
 blast-radius / lowest-effort first):
 
-1. **`src/components/screens/BaseDetailScreen.tsx`** (~7%) and
-   **`BaseFormScreen.tsx`** (~17%) — the generic scaffolds nearly every
-   detail/form screen is built on; tests here have the highest leverage per
-   line written.
-2. **`src/utils/exportImport.ts`** (~11% covered) — the plain-JSON path of
+1. **`src/utils/exportImport.ts`** (~11% covered) — the plain-JSON path of
    `importCharacterData`/`mergeCharacterData` is now tested (see
    `tst/utils/exportImport.test.ts`; note `jest.setup.js` mocks
    `expo-file-system/legacy`, the specifier this file actually imports, not
@@ -143,25 +139,41 @@ blast-radius / lowest-effort first):
    `.zip` branches of import/merge — all need `react-native-zip-archive` +
    directory-walking (`makeDirectoryAsync`/`copyAsync`/`getInfoAsync`/
    `readDirectoryAsync`) + `expo-sharing` mocked.
-3. **`src/utils/gitIntegration.ts`** (~900 lines, untested) — GitHub-backed
+2. **`src/utils/gitIntegration.ts`** (~900 lines, untested) — GitHub-backed
    sync; highest blast radius, needs `@octokit` mocking.
-4. ~~`src/utils/discordStorage.ts`~~ — **done.** Was untested and had the
-   same unwrapped read-modify-write bug `characterStorage.ts` had (no
-   `runExclusive`); both the bug and the test gap are fixed
-   (`tst/utils/discordStorage.test.ts` +
-   `tst/utils/discordStorage.concurrency.test.ts`, ~75% covered).
-5. **`src/utils/influenceAnalysis.ts`** (~370 lines) and
-   **`src/utils/factionStats.ts`** (~260 lines) — both pure computation,
-   both untested; easy, high-signal unit tests.
-6. **`src/utils/discordApi.ts`** and **`src/utils/discordCharacterExtraction.ts`**
+3. **`src/utils/discordApi.ts`** and **`src/utils/discordCharacterExtraction.ts`**
    (untested) — parsing/ingesting external Discord data; boundary-parsing
    bugs are likely here.
-7. **Every detail/form screen, and the whole `src/screens/discord/`,
-   `src/screens/events/`, and `src/screens/location/` folders** — entirely
-   untested (0%). Only the `*ListScreen` components have tests
-   (`tst/screens/character/CharacterListScreen.test.tsx`,
-   `tst/screens/faction/FactionListScreen.test.tsx`); use those as the
-   template.
+
+Done since the list above was last written:
+
+- ~~`src/components/screens/BaseDetailScreen.tsx`/`BaseFormScreen.tsx`~~ and
+  every templated character/faction/location/events/quest detail/form/list
+  screen — contract-based tests via `tst/helpers/screenContracts.ts`
+  (`describeListScreenContract`/`describeDetailScreenContract`/
+  `describeFormScreenContract`).
+- ~~`src/utils/discordStorage.ts`~~ — was untested and had the same
+  unwrapped read-modify-write bug `characterStorage.ts` had (no
+  `runExclusive`); both the bug and the test gap are fixed
+  (`tst/utils/discordStorage.test.ts` +
+  `tst/utils/discordStorage.concurrency.test.ts`).
+- ~~`src/utils/influenceAnalysis.ts`~~ and ~~`src/utils/factionStats.ts`~~ —
+  pure computation, now covered by `tst/utils/influenceAnalysis.test.ts` and
+  `tst/utils/factionStats.test.ts`. The one async export,
+  `analyzeFactionInfluence`, does a lazy `await import('@utils/characterStorage')`
+  — Jest's CommonJS transform doesn't lower dynamic `import()` on its own, so
+  `babel.config.js` adds `babel-plugin-dynamic-import-node` under the `test`
+  env to make it work under test (Metro/production builds are unaffected).
+- ~~`src/screens/discord/`~~ (all 6 screens) and ~~`LocationMapScreen.tsx`~~ —
+  bespoke tests (these don't fit the generic list/detail/form contracts) in
+  `tst/screens/discord/*.test.tsx` and
+  `tst/screens/location/LocationMapScreen.test.tsx`. Two reusable additions
+  came out of this: `installFocusEffectOnce()` (`tst/helpers/navigation.ts`)
+  for screens that gate a loading spinner behind `useFocusEffect` (the global
+  mock re-fires on every render, which bounces that gate into a real
+  render-phase update loop), and local per-file mocks for
+  `react-native-reanimated`/`react-native-gesture-handler` for the one screen
+  using shared-value animations and gesture composition.
 
 ## Scope discipline
 
