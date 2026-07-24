@@ -302,7 +302,6 @@ export const exportToGitHub = async (): Promise<{
         );
         if (images.length > 0) {
           character.imageUris = images;
-          character.imageUri = images[0];
           totalImages += images.length;
           console.log(
             `[GitHub Export] Processed ${images.length} images for character: ${character.name}`
@@ -320,7 +319,6 @@ export const exportToGitHub = async (): Promise<{
         );
         if (images.length > 0) {
           location.imageUris = images;
-          location.imageUri = images[0];
           totalImages += images.length;
           console.log(
             `[GitHub Export] Processed ${images.length} images for location: ${location.name}`
@@ -334,7 +332,6 @@ export const exportToGitHub = async (): Promise<{
         const images = await processEntityImages(event, 'events', event.id);
         if (images.length > 0) {
           event.imageUris = images;
-          event.imageUri = images[0];
           totalImages += images.length;
           console.log(
             `[GitHub Export] Processed ${images.length} images for event: ${event.title}`
@@ -349,7 +346,6 @@ export const exportToGitHub = async (): Promise<{
         const images = await processEntityImages(faction, 'factions', safeName);
         if (images.length > 0) {
           faction.imageUris = images;
-          faction.imageUri = images[0];
           totalImages += images.length;
           console.log(
             `[GitHub Export] Processed ${images.length} images for faction: ${faction.name}`
@@ -365,8 +361,8 @@ export const exportToGitHub = async (): Promise<{
 
     // Update data.json with modified paths
     // Note: This happens AFTER image processing because we need to update
-    // the imageUri/imageUris fields in the dataset to point to the
-    // relative paths in the repository (e.g., "images/characters/id_0.jpg")
+    // the imageUris fields in the dataset to point to the relative paths in
+    // the repository (e.g., "images/characters/id_0.jpg")
     const updatedDataContent = Buffer.from(
       JSON.stringify(sortedDataset, null, 2)
     ).toString('base64');
@@ -653,7 +649,6 @@ export const importFromGitHub = async (): Promise<{
             const localPaths = await downloadImages(character.imageUris);
             if (localPaths.length > 0) {
               character.imageUris = localPaths;
-              character.imageUri = localPaths[0];
               totalImagesDownloaded += localPaths.length;
             } else {
               console.warn(
@@ -664,12 +659,14 @@ export const importFromGitHub = async (): Promise<{
               delete character.imageUris;
             }
           } else if (character.imageUri) {
+            // Legacy single-image field from an older export/repo - download
+            // it and normalize onto imageUris, dropping the deprecated field.
             console.log(
               `[GitHub Import] Processing single image for character: ${character.name}`
             );
             const localPaths = await downloadImages([character.imageUri]);
+            delete character.imageUri;
             if (localPaths.length > 0) {
-              character.imageUri = localPaths[0];
               character.imageUris = localPaths;
               totalImagesDownloaded += localPaths.length;
             } else {
@@ -677,7 +674,6 @@ export const importFromGitHub = async (): Promise<{
                 `[GitHub Import] No image downloaded for character: ${character.name}`
               );
               // Clear image references if download failed
-              delete character.imageUri;
               delete character.imageUris;
             }
           }
@@ -694,7 +690,6 @@ export const importFromGitHub = async (): Promise<{
             const localPaths = await downloadImages(location.imageUris);
             if (localPaths.length > 0) {
               location.imageUris = localPaths;
-              location.imageUri = localPaths[0];
               totalImagesDownloaded += localPaths.length;
             } else {
               console.warn(
@@ -705,12 +700,14 @@ export const importFromGitHub = async (): Promise<{
               delete location.imageUris;
             }
           } else if (location.imageUri) {
+            // Legacy single-image field from an older export/repo - download
+            // it and normalize onto imageUris, dropping the deprecated field.
             console.log(
               `[GitHub Import] Processing single image for location: ${location.name}`
             );
             const localPaths = await downloadImages([location.imageUri]);
+            delete location.imageUri;
             if (localPaths.length > 0) {
-              location.imageUri = localPaths[0];
               location.imageUris = localPaths;
               totalImagesDownloaded += localPaths.length;
             } else {
@@ -718,7 +715,6 @@ export const importFromGitHub = async (): Promise<{
                 `[GitHub Import] No image downloaded for location: ${location.name}`
               );
               // Clear image references if download failed
-              delete location.imageUri;
               delete location.imageUris;
             }
           }
@@ -735,7 +731,6 @@ export const importFromGitHub = async (): Promise<{
             const localPaths = await downloadImages(event.imageUris);
             if (localPaths.length > 0) {
               event.imageUris = localPaths;
-              event.imageUri = localPaths[0];
               totalImagesDownloaded += localPaths.length;
             } else {
               console.warn(
@@ -746,12 +741,14 @@ export const importFromGitHub = async (): Promise<{
               delete event.imageUris;
             }
           } else if (event.imageUri) {
+            // Legacy single-image field from an older export/repo - download
+            // it and normalize onto imageUris, dropping the deprecated field.
             console.log(
               `[GitHub Import] Processing single image for event: ${event.title}`
             );
             const localPaths = await downloadImages([event.imageUri]);
+            delete event.imageUri;
             if (localPaths.length > 0) {
-              event.imageUri = localPaths[0];
               event.imageUris = localPaths;
               totalImagesDownloaded += localPaths.length;
             } else {
@@ -759,7 +756,6 @@ export const importFromGitHub = async (): Promise<{
                 `[GitHub Import] No image downloaded for event: ${event.title}`
               );
               // Clear image references if download failed
-              delete event.imageUri;
               delete event.imageUris;
             }
           }
@@ -776,7 +772,6 @@ export const importFromGitHub = async (): Promise<{
             const localPaths = await downloadImages(faction.imageUris);
             if (localPaths.length > 0) {
               faction.imageUris = localPaths;
-              faction.imageUri = localPaths[0];
               totalImagesDownloaded += localPaths.length;
             } else {
               console.warn(
@@ -787,12 +782,14 @@ export const importFromGitHub = async (): Promise<{
               delete faction.imageUris;
             }
           } else if (faction.imageUri) {
+            // Legacy single-image field from an older export/repo - download
+            // it and normalize onto imageUris, dropping the deprecated field.
             console.log(
               `[GitHub Import] Processing single image for faction: ${faction.name}`
             );
             const localPaths = await downloadImages([faction.imageUri]);
+            delete faction.imageUri;
             if (localPaths.length > 0) {
-              faction.imageUri = localPaths[0];
               faction.imageUris = localPaths;
               totalImagesDownloaded += localPaths.length;
             } else {
@@ -800,7 +797,6 @@ export const importFromGitHub = async (): Promise<{
                 `[GitHub Import] No image downloaded for faction: ${faction.name}`
               );
               // Clear image references if download failed
-              delete faction.imageUri;
               delete faction.imageUris;
             }
           }

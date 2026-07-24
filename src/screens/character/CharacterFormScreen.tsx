@@ -73,10 +73,7 @@ export const CharacterFormScreen: React.FC = () => {
           relationships: [...(editingCharacter.relationships || [])],
           notes: editingCharacter.notes || '',
           occupation: editingCharacter.occupation || '',
-          imageUri: editingCharacter.imageUri,
-          imageUris:
-            editingCharacter.imageUris ||
-            (editingCharacter.imageUri ? [editingCharacter.imageUri] : []),
+          imageUris: editingCharacter.imageUris || [],
           locationId: editingCharacter.locationId,
           retired: editingCharacter.retired,
           cyberware: [...(editingCharacter.cyberware || [])],
@@ -90,7 +87,6 @@ export const CharacterFormScreen: React.FC = () => {
           relationships: [],
           notes: '',
           occupation: '',
-          imageUri: undefined,
           imageUris: [],
           locationId: undefined,
           retired: false,
@@ -226,10 +222,6 @@ export const CharacterFormScreen: React.FC = () => {
       const newImageUri = result.assets[0].uri;
       const currentImages = form.imageUris || [];
       handleChange('imageUris', [...currentImages, newImageUri]);
-      // Keep imageUri for backward compatibility (first image)
-      if (currentImages.length === 0) {
-        handleChange('imageUri', newImageUri);
-      }
     }
   };
 
@@ -237,8 +229,6 @@ export const CharacterFormScreen: React.FC = () => {
     const currentImages = form.imageUris || [];
     const newImages = currentImages.filter((_, i) => i !== index);
     handleChange('imageUris', newImages);
-    // Update imageUri for backward compatibility
-    handleChange('imageUri', newImages.length > 0 ? newImages[0] : undefined);
   };
 
   const handleSubmit = async () => {

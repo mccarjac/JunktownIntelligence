@@ -40,7 +40,6 @@ interface EventFormData {
   characterIds: string[];
   factionNames: string[];
   notes: string;
-  imageUri?: string;
   imageUris?: string[];
   certaintyLevel: CertaintyLevel;
 }
@@ -66,7 +65,6 @@ export const EventsFormScreen: React.FC = () => {
     characterIds: [],
     factionNames: [],
     notes: '',
-    imageUri: undefined,
     imageUris: [],
     certaintyLevel: 'confirmed',
   });
@@ -111,8 +109,7 @@ export const EventsFormScreen: React.FC = () => {
         characterIds: event.characterIds || [],
         factionNames: event.factionNames || [],
         notes: event.notes || '',
-        imageUri: event.imageUri,
-        imageUris: event.imageUris || (event.imageUri ? [event.imageUri] : []),
+        imageUris: event.imageUris || [],
         certaintyLevel: event.certaintyLevel || 'confirmed',
       });
     }
@@ -145,7 +142,6 @@ export const EventsFormScreen: React.FC = () => {
       setFormData({
         ...formData,
         imageUris: newImages,
-        imageUri: newImages[0], // Keep first image for backward compatibility
       });
     }
   };
@@ -156,7 +152,6 @@ export const EventsFormScreen: React.FC = () => {
     setFormData({
       ...formData,
       imageUris: newImages,
-      imageUri: newImages.length > 0 ? newImages[0] : undefined,
     });
   };
 

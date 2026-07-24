@@ -157,20 +157,14 @@ export const LocationDetailsScreen: React.FC = () => {
         <Text style={styles.locationName}>{location.name}</Text>
 
         {/* Location Images */}
-        {((location.imageUris && location.imageUris.length > 0) ||
-          location.imageUri) && (
+        {location.imageUris && location.imageUris.length > 0 && (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             style={styles.imageGallery}
             contentContainerStyle={styles.imageGalleryContent}
           >
-            {(location.imageUris && location.imageUris.length > 0
-              ? location.imageUris
-              : location.imageUri
-                ? [location.imageUri]
-                : []
-            ).map((uri, index) => (
+            {location.imageUris.map((uri, index) => (
               <View key={index} style={styles.imageContainer}>
                 <Image
                   source={{ uri }}

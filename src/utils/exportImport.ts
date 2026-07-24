@@ -154,13 +154,15 @@ const exportCharacterDataNative = async (): Promise<void> => {
           }
           if (processedUris.length > 0) {
             character.imageUris = processedUris;
-            character.imageUri = processedUris[0];
           }
         }
-        // Handle legacy single image
+        // Handle a legacy single image from data that predates the
+        // imageUris migration. Read-only tolerance: normalize onto
+        // imageUris and never write the deprecated field back out.
         else if (character.imageUri) {
-          if (character.imageUri.startsWith('data:')) {
-            const imageData = extractImageData(character.imageUri);
+          const legacyUri = character.imageUri;
+          if (legacyUri.startsWith('data:')) {
+            const imageData = extractImageData(legacyUri);
             if (imageData) {
               const filename = `images/characters/${character.id}.${imageData.extension}`;
               const filePath = tempDir + filename;
@@ -171,31 +173,33 @@ const exportCharacterDataNative = async (): Promise<void> => {
                   encoding: FileSystem.EncodingType.Base64,
                 }
               );
-              character.imageUri = filename;
               character.imageUris = [filename];
               imageCounter++;
             }
           } else if (
-            character.imageUri.startsWith('file://') ||
-            character.imageUri.startsWith('/')
+            legacyUri.startsWith('file://') ||
+            legacyUri.startsWith('/')
           ) {
             // Handle file URI - copy file directly
             try {
               const extension =
-                character.imageUri.split('.').pop()?.toLowerCase() || 'jpg';
+                legacyUri.split('.').pop()?.toLowerCase() || 'jpg';
               const filename = `images/characters/${character.id}.${extension}`;
               const filePath = tempDir + filename;
               await FileSystem.copyAsync({
-                from: character.imageUri,
+                from: legacyUri,
                 to: filePath,
               });
-              character.imageUri = filename;
               character.imageUris = [filename];
               imageCounter++;
             } catch {
               // Image file not accessible, skip
             }
+          } else {
+            // Already a relative/remote path - carry it over as-is.
+            character.imageUris = [legacyUri];
           }
+          delete character.imageUri;
         }
       }
     }
@@ -245,13 +249,15 @@ const exportCharacterDataNative = async (): Promise<void> => {
           }
           if (processedUris.length > 0) {
             location.imageUris = processedUris;
-            location.imageUri = processedUris[0];
           }
         }
-        // Handle legacy single image
+        // Handle a legacy single image from data that predates the
+        // imageUris migration. Read-only tolerance: normalize onto
+        // imageUris and never write the deprecated field back out.
         else if (location.imageUri) {
-          if (location.imageUri.startsWith('data:')) {
-            const imageData = extractImageData(location.imageUri);
+          const legacyUri = location.imageUri;
+          if (legacyUri.startsWith('data:')) {
+            const imageData = extractImageData(legacyUri);
             if (imageData) {
               const filename = `images/locations/${location.id}.${imageData.extension}`;
               const filePath = tempDir + filename;
@@ -262,31 +268,33 @@ const exportCharacterDataNative = async (): Promise<void> => {
                   encoding: FileSystem.EncodingType.Base64,
                 }
               );
-              location.imageUri = filename;
               location.imageUris = [filename];
               imageCounter++;
             }
           } else if (
-            location.imageUri.startsWith('file://') ||
-            location.imageUri.startsWith('/')
+            legacyUri.startsWith('file://') ||
+            legacyUri.startsWith('/')
           ) {
             // Handle file URI - copy file directly
             try {
               const extension =
-                location.imageUri.split('.').pop()?.toLowerCase() || 'jpg';
+                legacyUri.split('.').pop()?.toLowerCase() || 'jpg';
               const filename = `images/locations/${location.id}.${extension}`;
               const filePath = tempDir + filename;
               await FileSystem.copyAsync({
-                from: location.imageUri,
+                from: legacyUri,
                 to: filePath,
               });
-              location.imageUri = filename;
               location.imageUris = [filename];
               imageCounter++;
             } catch {
               // Image file not accessible, skip
             }
+          } else {
+            // Already a relative/remote path - carry it over as-is.
+            location.imageUris = [legacyUri];
           }
+          delete location.imageUri;
         }
       }
     }
@@ -336,13 +344,15 @@ const exportCharacterDataNative = async (): Promise<void> => {
           }
           if (processedUris.length > 0) {
             event.imageUris = processedUris;
-            event.imageUri = processedUris[0];
           }
         }
-        // Handle legacy single image
+        // Handle a legacy single image from data that predates the
+        // imageUris migration. Read-only tolerance: normalize onto
+        // imageUris and never write the deprecated field back out.
         else if (event.imageUri) {
-          if (event.imageUri.startsWith('data:')) {
-            const imageData = extractImageData(event.imageUri);
+          const legacyUri = event.imageUri;
+          if (legacyUri.startsWith('data:')) {
+            const imageData = extractImageData(legacyUri);
             if (imageData) {
               const filename = `images/events/${event.id}.${imageData.extension}`;
               const filePath = tempDir + filename;
@@ -353,31 +363,33 @@ const exportCharacterDataNative = async (): Promise<void> => {
                   encoding: FileSystem.EncodingType.Base64,
                 }
               );
-              event.imageUri = filename;
               event.imageUris = [filename];
               imageCounter++;
             }
           } else if (
-            event.imageUri.startsWith('file://') ||
-            event.imageUri.startsWith('/')
+            legacyUri.startsWith('file://') ||
+            legacyUri.startsWith('/')
           ) {
             // Handle file URI - copy file directly
             try {
               const extension =
-                event.imageUri.split('.').pop()?.toLowerCase() || 'jpg';
+                legacyUri.split('.').pop()?.toLowerCase() || 'jpg';
               const filename = `images/events/${event.id}.${extension}`;
               const filePath = tempDir + filename;
               await FileSystem.copyAsync({
-                from: event.imageUri,
+                from: legacyUri,
                 to: filePath,
               });
-              event.imageUri = filename;
               event.imageUris = [filename];
               imageCounter++;
             } catch {
               // Image file not accessible, skip
             }
+          } else {
+            // Already a relative/remote path - carry it over as-is.
+            event.imageUris = [legacyUri];
           }
+          delete event.imageUri;
         }
       }
     }
@@ -430,13 +442,15 @@ const exportCharacterDataNative = async (): Promise<void> => {
           }
           if (processedUris.length > 0) {
             faction.imageUris = processedUris;
-            faction.imageUri = processedUris[0];
           }
         }
-        // Handle legacy single image
+        // Handle a legacy single image from data that predates the
+        // imageUris migration. Read-only tolerance: normalize onto
+        // imageUris and never write the deprecated field back out.
         else if (faction.imageUri) {
-          if (faction.imageUri.startsWith('data:')) {
-            const imageData = extractImageData(faction.imageUri);
+          const legacyUri = faction.imageUri;
+          if (legacyUri.startsWith('data:')) {
+            const imageData = extractImageData(legacyUri);
             if (imageData) {
               const safeName = faction.name.replace(/[^a-zA-Z0-9]/g, '_');
               const filename = `images/factions/${safeName}.${imageData.extension}`;
@@ -448,32 +462,34 @@ const exportCharacterDataNative = async (): Promise<void> => {
                   encoding: FileSystem.EncodingType.Base64,
                 }
               );
-              faction.imageUri = filename;
               faction.imageUris = [filename];
               imageCounter++;
             }
           } else if (
-            faction.imageUri.startsWith('file://') ||
-            faction.imageUri.startsWith('/')
+            legacyUri.startsWith('file://') ||
+            legacyUri.startsWith('/')
           ) {
             // Handle file URI - copy file directly
             try {
               const extension =
-                faction.imageUri.split('.').pop()?.toLowerCase() || 'jpg';
+                legacyUri.split('.').pop()?.toLowerCase() || 'jpg';
               const safeName = faction.name.replace(/[^a-zA-Z0-9]/g, '_');
               const filename = `images/factions/${safeName}.${extension}`;
               const filePath = tempDir + filename;
               await FileSystem.copyAsync({
-                from: faction.imageUri,
+                from: legacyUri,
                 to: filePath,
               });
-              faction.imageUri = filename;
               faction.imageUris = [filename];
               imageCounter++;
             } catch {
               // Image file not accessible, skip
             }
+          } else {
+            // Already a relative/remote path - carry it over as-is.
+            faction.imageUris = [legacyUri];
           }
+          delete faction.imageUri;
         }
       }
     }
@@ -785,10 +801,9 @@ const importCharacterDataNative = async (): Promise<boolean> => {
           );
           if (character) {
             console.log(
-              `[ZIP Import] Found character ${character.name}, updating imageUri from "${character.imageUri}" to "${sortedImages[0]}"`
+              `[ZIP Import] Found character ${character.name}, setting imageUris to ${sortedImages.length} image(s)`
             );
             character.imageUris = sortedImages;
-            character.imageUri = sortedImages[0]; // Backward compatibility
           } else {
             console.warn(
               `[ZIP Import] Character ${entityId} not found in dataset`
@@ -800,10 +815,9 @@ const importCharacterDataNative = async (): Promise<boolean> => {
           );
           if (location) {
             console.log(
-              `[ZIP Import] Found location ${location.name}, updating imageUri`
+              `[ZIP Import] Found location ${location.name}, updating imageUris`
             );
             location.imageUris = sortedImages;
-            location.imageUri = sortedImages[0]; // Backward compatibility
           } else {
             console.warn(
               `[ZIP Import] Location ${entityId} not found in dataset`
@@ -813,10 +827,9 @@ const importCharacterDataNative = async (): Promise<boolean> => {
           const event = dataset.events?.find((e: any) => e.id === entityId);
           if (event) {
             console.log(
-              `[ZIP Import] Found event ${event.title}, updating imageUri`
+              `[ZIP Import] Found event ${event.title}, updating imageUris`
             );
             event.imageUris = sortedImages;
-            event.imageUri = sortedImages[0]; // Backward compatibility
           } else {
             console.warn(`[ZIP Import] Event ${entityId} not found in dataset`);
           }
@@ -827,10 +840,9 @@ const importCharacterDataNative = async (): Promise<boolean> => {
           );
           if (faction) {
             console.log(
-              `[ZIP Import] Found faction ${faction.name}, updating imageUri`
+              `[ZIP Import] Found faction ${faction.name}, updating imageUris`
             );
             faction.imageUris = sortedImages;
-            faction.imageUri = sortedImages[0]; // Backward compatibility
           } else {
             console.warn(
               `[ZIP Import] Faction ${entityId} not found in dataset`
@@ -867,7 +879,10 @@ const importCharacterDataNative = async (): Promise<boolean> => {
         return false;
       }
     } else {
-      // Handle JSON file (without images - strip imageUri fields)
+      // Handle JSON file (without images). This path explicitly skips
+      // images, so a legacy single `imageUri` (often a data: URI or a
+      // device-local file:// path) is dropped rather than backfilled into
+      // imageUris - there is no image asset coming along with it.
       const fileContent = await FileSystem.readAsStringAsync(fileUri);
       const dataset = JSON.parse(fileContent);
 
@@ -882,6 +897,20 @@ const importCharacterDataNative = async (): Promise<boolean> => {
       if (dataset.locations) {
         dataset.locations.forEach((location: any) => {
           delete location.imageUri;
+        });
+      }
+
+      // Strip imageUri from all events
+      if (dataset.events) {
+        dataset.events.forEach((event: any) => {
+          delete event.imageUri;
+        });
+      }
+
+      // Strip imageUri from all factions
+      if (dataset.factions) {
+        dataset.factions.forEach((faction: any) => {
+          delete faction.imageUri;
         });
       }
 
@@ -1080,7 +1109,6 @@ const mergeCharacterDataNative = async (): Promise<boolean> => {
           );
           if (character) {
             character.imageUris = sortedImages;
-            character.imageUri = sortedImages[0];
           }
         } else if (entityType === 'location') {
           const location = dataset.locations?.find(
@@ -1088,13 +1116,11 @@ const mergeCharacterDataNative = async (): Promise<boolean> => {
           );
           if (location) {
             location.imageUris = sortedImages;
-            location.imageUri = sortedImages[0];
           }
         } else if (entityType === 'event') {
           const event = dataset.events?.find((e: any) => e.id === entityId);
           if (event) {
             event.imageUris = sortedImages;
-            event.imageUri = sortedImages[0];
           }
         } else if (entityType === 'faction') {
           // For factions, entityId is the sanitized faction name
@@ -1103,7 +1129,6 @@ const mergeCharacterDataNative = async (): Promise<boolean> => {
           );
           if (faction) {
             faction.imageUris = sortedImages;
-            faction.imageUri = sortedImages[0];
           }
         }
       }
@@ -1113,7 +1138,10 @@ const mergeCharacterDataNative = async (): Promise<boolean> => {
 
       fileContent = JSON.stringify(dataset);
     } else {
-      // Handle JSON file (without images - strip imageUri fields)
+      // Handle JSON file (without images). This path explicitly skips
+      // images, so a legacy single `imageUri` (often a data: URI or a
+      // device-local file:// path) is dropped rather than backfilled into
+      // imageUris - there is no image asset coming along with it.
       const jsonContent = await FileSystem.readAsStringAsync(fileUri);
       const dataset = JSON.parse(jsonContent);
 
@@ -1128,6 +1156,20 @@ const mergeCharacterDataNative = async (): Promise<boolean> => {
       if (dataset.locations) {
         dataset.locations.forEach((location: any) => {
           delete location.imageUri;
+        });
+      }
+
+      // Strip imageUri from all events
+      if (dataset.events) {
+        dataset.events.forEach((event: any) => {
+          delete event.imageUri;
+        });
+      }
+
+      // Strip imageUri from all factions
+      if (dataset.factions) {
+        dataset.factions.forEach((faction: any) => {
+          delete faction.imageUri;
         });
       }
 

@@ -13,7 +13,6 @@ export interface GameLocation {
   id: string;
   name: string;
   description: string;
-  imageUri?: string; // Deprecated: Use imageUris instead
   imageUris?: string[];
   mapCoordinates?: {
     x: number; // Normalized coordinate (0-1) representing position on map
@@ -88,7 +87,6 @@ export interface GameCharacter {
   distinctionIds: DistinctionId[];
   factions: Faction[];
   relationships: Relationship[];
-  imageUri?: string; // Deprecated: Use imageUris instead
   imageUris?: string[];
   notes?: string;
   locationId?: string; // Reference to GameLocation.id
@@ -121,7 +119,6 @@ export interface GameEvent {
   characterIds?: string[]; // References to GameCharacter.id
   factionNames?: string[]; // Faction names involved in the event
   notes?: string;
-  imageUri?: string; // Deprecated: Use imageUris instead
   imageUris?: string[];
   certaintyLevel?: CertaintyLevel; // Certainty level: unconfirmed, confirmed, or disputed
   createdAt: string;
@@ -176,7 +173,6 @@ export interface GameQuest {
   requiredMaterials?: QuestMaterial[];
   teamSize?: number; // Desired team size for proposal generation
   notes?: string;
-  imageUri?: string; // Deprecated: Use imageUris instead
   imageUris?: string[];
   createdAt: string;
   updatedAt: string;

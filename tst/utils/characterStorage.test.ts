@@ -1803,6 +1803,179 @@ describe('characterStorage', () => {
       });
     });
 
+    describe('migrateImageUris', () => {
+      it('backfills a legacy imageUri into imageUris and strips it, for every entity type', async () => {
+        const character = {
+          id: 'char-1',
+          name: 'Test',
+          species: 'Human',
+          perkIds: [],
+          distinctionIds: [],
+          factions: [],
+          relationships: [],
+          present: false,
+          retired: false,
+          imageUri: 'legacy-character.jpg',
+          createdAt: mockDate,
+          updatedAt: mockDate,
+        };
+        const faction = {
+          name: 'Brotherhood',
+          description: '',
+          imageUri: 'legacy-faction.jpg',
+          createdAt: mockDate,
+          updatedAt: mockDate,
+        };
+        const location = {
+          id: 'loc-1',
+          name: 'Test Location',
+          description: '',
+          imageUri: 'legacy-location.jpg',
+          createdAt: mockDate,
+          updatedAt: mockDate,
+        };
+        const event = {
+          id: 'event-1',
+          title: 'Test Event',
+          date: '2025-01-01',
+          imageUri: 'legacy-event.jpg',
+          createdAt: mockDate,
+          updatedAt: mockDate,
+        };
+        const quest = {
+          id: 'quest-1',
+          name: 'Test Quest',
+          status: QuestStatus.NotStarted,
+          imageUri: 'legacy-quest.jpg',
+          createdAt: mockDate,
+          updatedAt: mockDate,
+        };
+
+        (SafeAsyncStorageJSONParser.getItem as jest.Mock)
+          .mockResolvedValueOnce({
+            characters: [character],
+            version: '1.0',
+            lastUpdated: mockDate,
+          })
+          .mockResolvedValueOnce({
+            factions: [faction],
+            version: '1.0',
+            lastUpdated: mockDate,
+          })
+          .mockResolvedValueOnce({
+            locations: [location],
+            version: '1.0',
+            lastUpdated: mockDate,
+          })
+          .mockResolvedValueOnce({
+            events: [event],
+            version: '1.0',
+            lastUpdated: mockDate,
+          })
+          .mockResolvedValueOnce({
+            quests: [quest],
+            version: '1.0',
+            lastUpdated: mockDate,
+          });
+
+        await CharacterStorage.migrateImageUris();
+
+        const setItemMock = SafeAsyncStorageJSONParser.setItem as jest.Mock;
+
+        const savedCharacters = setItemMock.mock.calls.find(
+          c => c[0] === 'gameCharacterManager'
+        )?.[1];
+        expect(savedCharacters.characters[0].imageUris).toEqual([
+          'legacy-character.jpg',
+        ]);
+        expect(savedCharacters.characters[0].imageUri).toBeUndefined();
+
+        const savedFactions = setItemMock.mock.calls.find(
+          c => c[0] === 'gameCharacterManager_factions'
+        )?.[1];
+        expect(savedFactions.factions[0].imageUris).toEqual([
+          'legacy-faction.jpg',
+        ]);
+        expect(savedFactions.factions[0].imageUri).toBeUndefined();
+
+        const savedLocations = setItemMock.mock.calls.find(
+          c => c[0] === 'gameCharacterManager_locations'
+        )?.[1];
+        expect(savedLocations.locations[0].imageUris).toEqual([
+          'legacy-location.jpg',
+        ]);
+        expect(savedLocations.locations[0].imageUri).toBeUndefined();
+
+        const savedEvents = setItemMock.mock.calls.find(
+          c => c[0] === 'gameCharacterManager_events'
+        )?.[1];
+        expect(savedEvents.events[0].imageUris).toEqual(['legacy-event.jpg']);
+        expect(savedEvents.events[0].imageUri).toBeUndefined();
+
+        const savedQuests = setItemMock.mock.calls.find(
+          c => c[0] === 'gameCharacterManager_quests'
+        )?.[1];
+        expect(savedQuests.quests[0].imageUris).toEqual(['legacy-quest.jpg']);
+        expect(savedQuests.quests[0].imageUri).toBeUndefined();
+      });
+
+      it('does not write to storage when no records have a legacy imageUri', async () => {
+        (SafeAsyncStorageJSONParser.getItem as jest.Mock)
+          .mockResolvedValueOnce({
+            characters: [
+              { id: 'char-1', name: 'Test', imageUris: ['already-multi.jpg'] },
+            ],
+            version: '1.0',
+          })
+          .mockResolvedValueOnce({ factions: [], version: '1.0' })
+          .mockResolvedValueOnce({ locations: [], version: '1.0' })
+          .mockResolvedValueOnce({ events: [], version: '1.0' })
+          .mockResolvedValueOnce({ quests: [], version: '1.0' });
+
+        await CharacterStorage.migrateImageUris();
+
+        expect(SafeAsyncStorageJSONParser.setItem).not.toHaveBeenCalled();
+      });
+
+      it('preserves an existing imageUris array rather than overwriting it with the legacy value', async () => {
+        (SafeAsyncStorageJSONParser.getItem as jest.Mock)
+          .mockResolvedValueOnce({
+            characters: [
+              {
+                id: 'char-1',
+                name: 'Test',
+                imageUri: 'legacy.jpg',
+                imageUris: ['already-multi.jpg'],
+              },
+            ],
+            version: '1.0',
+          })
+          .mockResolvedValueOnce({ factions: [], version: '1.0' })
+          .mockResolvedValueOnce({ locations: [], version: '1.0' })
+          .mockResolvedValueOnce({ events: [], version: '1.0' })
+          .mockResolvedValueOnce({ quests: [], version: '1.0' });
+
+        await CharacterStorage.migrateImageUris();
+
+        const saved = (
+          SafeAsyncStorageJSONParser.setItem as jest.Mock
+        ).mock.calls.find(c => c[0] === 'gameCharacterManager')?.[1];
+        expect(saved.characters[0].imageUris).toEqual(['already-multi.jpg']);
+        expect(saved.characters[0].imageUri).toBeUndefined();
+      });
+
+      it('is a no-op (idempotent) when storage is empty for every key', async () => {
+        (SafeAsyncStorageJSONParser.getItem as jest.Mock).mockResolvedValue(
+          null
+        );
+
+        await expect(
+          CharacterStorage.migrateImageUris()
+        ).resolves.toBeUndefined();
+        expect(SafeAsyncStorageJSONParser.setItem).not.toHaveBeenCalled();
+      });
+    });
+
     describe('Location Management Advanced', () => {
       it('should return null when creating location with duplicate name', async () => {
         (SafeAsyncStorageJSONParser.getItem as jest.Mock).mockResolvedValue({
@@ -2201,7 +2374,6 @@ describe('characterStorage', () => {
           name: '',
           species: 'Human',
           notes: '',
-          imageUri: '',
           perkIds: [],
           distinctionIds: [],
           factions: [],
@@ -2217,7 +2389,6 @@ describe('characterStorage', () => {
           name: 'Imported Name',
           species: 'Human',
           notes: 'Imported notes',
-          imageUri: 'http://example.com/image.png',
           perkIds: [],
           distinctionIds: [],
           factions: [],
@@ -2251,7 +2422,6 @@ describe('characterStorage', () => {
         expect(result.conflicts).toHaveLength(0);
         expect(result.merged[0].name).toBe('Imported Name');
         expect(result.merged[0].notes).toBe('Imported notes');
-        expect(result.merged[0].imageUri).toBe('http://example.com/image.png');
       });
 
       it('should merge and update relationships', async () => {
