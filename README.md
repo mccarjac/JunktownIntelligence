@@ -33,6 +33,7 @@ _Developed by Jacob McCarthy ([mccarjac](https://github.com/mccarjac))_
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
   - [Running the App](#running-the-app)
+  - [Testing on a Physical Device](#-testing-on-a-physical-device)
 - [Available Scripts](#-available-scripts)
 - [Building for Android](#-building-for-android)
 - [Project Structure](#-project-structure)
@@ -236,6 +237,58 @@ npm run ios
 ```
 
 **Note**: Requires macOS and Xcode. iOS simulator will launch automatically.
+
+---
+
+## 📱 Testing on a Physical Device
+
+Handy when you want to try out a branch or PR without doing a full build.
+
+### Android
+
+**USB (recommended, most reliable):**
+
+1. Enable Developer Options and USB debugging on the device ([see official docs](https://developer.android.com/studio/run/device))
+2. Connect the device via USB and accept the "Allow USB debugging" prompt on the device
+3. Verify the device is detected:
+   ```bash
+   adb devices
+   ```
+4. Run the app:
+   ```bash
+   npm run android
+   ```
+
+**Wireless (device and computer on the same Wi-Fi network):**
+
+1. Start the dev server:
+   ```bash
+   npx expo start
+   ```
+2. Open the **Expo Go** app on the device and scan the QR code shown in the terminal
+
+### iOS
+
+Testing on a physical iPhone/iPad doesn't require a Mac or Xcode — only the
+Expo Go app:
+
+1. Install **Expo Go** from the App Store
+2. Make sure the device and computer are on the same Wi-Fi network
+3. Start the dev server:
+   ```bash
+   npx expo start
+   ```
+4. Scan the QR code with the iOS Camera app (it opens automatically in Expo Go)
+
+### Troubleshooting
+
+- Device/computer can't reach the Metro bundler (e.g. different networks,
+  corporate/guest Wi-Fi that blocks device-to-device traffic): restart with
+  `npx expo start --tunnel`
+- `adb devices` shows nothing: recheck USB debugging is authorized and that
+  the cable supports data (not charge-only)
+- Shake the device to open the in-app developer menu; press `r` in the
+  terminal to reload the JS bundle without restarting the server
 
 ---
 
