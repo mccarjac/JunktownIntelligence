@@ -18,6 +18,7 @@ import {
   RootStackParamList,
   RootDrawerParamList,
 } from './src/navigation/types';
+import { GlobalSearchScreen } from './src/screens/search/GlobalSearchScreen';
 import { CharacterListScreen } from './src/screens/character/CharacterListScreen';
 import { CharacterDetailScreen } from './src/screens/character/CharacterDetailScreen';
 import { CharacterFormScreen } from './src/screens/character/CharacterFormScreen';
@@ -79,6 +80,15 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
 
   return (
     <DrawerContentScrollView {...props} style={{ backgroundColor: '#262647' }}>
+      <DrawerItem
+        label="Search"
+        onPress={() => navigation.navigate('GlobalSearch')}
+        focused={isActive('GlobalSearch')}
+        activeTintColor="#6C5CE7"
+        inactiveTintColor="#B8B8CC"
+        activeBackgroundColor="rgba(108, 92, 231, 0.1)"
+        labelStyle={drawerStyles.drawerLabel}
+      />
       <DrawerItem
         label="Characters"
         onPress={() => navigation.navigate('CharacterList')}
@@ -262,6 +272,14 @@ function MainDrawer() {
         },
       }}
     >
+      <Drawer.Screen
+        name="GlobalSearch"
+        component={GlobalSearchScreen}
+        options={{
+          title: 'Search',
+          drawerLabel: 'Search',
+        }}
+      />
       <Drawer.Screen
         name="CharacterList"
         component={CharacterListScreen}

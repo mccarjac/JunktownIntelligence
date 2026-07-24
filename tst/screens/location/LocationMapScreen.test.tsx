@@ -27,19 +27,27 @@ describe('LocationMapScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     primeStorageDefaults();
-    jest.spyOn(Image, 'resolveAssetSource').mockReturnValue({
-      width: IMAGE_SIZE.width,
-      height: IMAGE_SIZE.height,
-      uri: 'test-map-uri',
-      scale: 1,
-    });
   });
 
   afterEach(() => {
     resetNavigationMocks();
   });
 
+  it('shows a loading state before the map asset size resolves', () => {
+    jest.spyOn(Image, 'resolveAssetSource').mockReturnValue(undefined as any);
+
+    const { getByText } = render(<LocationMapScreen />);
+
+    expect(getByText('Loading map...')).toBeTruthy();
+  });
+
   it('renders markers only for locations that have map coordinates', async () => {
+    jest.spyOn(Image, 'resolveAssetSource').mockReturnValue({
+      width: IMAGE_SIZE.width,
+      height: IMAGE_SIZE.height,
+      uri: 'test-map-uri',
+      scale: 1,
+    });
     storage.loadLocations.mockResolvedValue([
       makeLocation({
         id: 'loc-placed',
@@ -58,6 +66,12 @@ describe('LocationMapScreen', () => {
   });
 
   it('shows the info card with a "View details" link when a marker is pressed', async () => {
+    jest.spyOn(Image, 'resolveAssetSource').mockReturnValue({
+      width: IMAGE_SIZE.width,
+      height: IMAGE_SIZE.height,
+      uri: 'test-map-uri',
+      scale: 1,
+    });
     storage.loadLocations.mockResolvedValue([
       makeLocation({
         id: 'loc-1',
@@ -77,6 +91,12 @@ describe('LocationMapScreen', () => {
   });
 
   it('navigates to LocationDetails with the location id from the info card', async () => {
+    jest.spyOn(Image, 'resolveAssetSource').mockReturnValue({
+      width: IMAGE_SIZE.width,
+      height: IMAGE_SIZE.height,
+      uri: 'test-map-uri',
+      scale: 1,
+    });
     storage.loadLocations.mockResolvedValue([
       makeLocation({
         id: 'loc-1',
@@ -99,6 +119,12 @@ describe('LocationMapScreen', () => {
   });
 
   it('places a location at the long-pressed coordinates via the picker', async () => {
+    jest.spyOn(Image, 'resolveAssetSource').mockReturnValue({
+      width: IMAGE_SIZE.width,
+      height: IMAGE_SIZE.height,
+      uri: 'test-map-uri',
+      scale: 1,
+    });
     storage.loadLocations.mockResolvedValue([
       makeLocation({ id: 'loc-1', name: 'The Docks' }),
     ]);

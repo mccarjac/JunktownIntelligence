@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import { useEffect, type ReactElement } from 'react';
 
 /**
  * Helpers for controlling the global `@react-navigation/native` mock from
@@ -21,6 +21,7 @@ export interface NavMock {
 interface MockedNavigationModule {
   useNavigation: () => unknown;
   useRoute: () => { params: Record<string, unknown> };
+  useFocusEffect: (callback: () => void) => void;
 }
 
 const getMockModule = (): MockedNavigationModule =>
@@ -28,6 +29,9 @@ const getMockModule = (): MockedNavigationModule =>
 
 let originalUseNavigation: MockedNavigationModule['useNavigation'] | undefined;
 let originalUseRoute: MockedNavigationModule['useRoute'] | undefined;
+let originalUseFocusEffect:
+  | MockedNavigationModule['useFocusEffect']
+  | undefined;
 
 export function installNavigationMock(): NavMock {
   const mockModule = getMockModule();
@@ -54,6 +58,31 @@ export function installRouteParams(params: Record<string, unknown>): void {
   mockModule.useRoute = () => ({ params });
 }
 
+/**
+ * The global `useFocusEffect` mock (`jest.setup.js`) invokes its callback
+ * synchronously on *every* render, unlike the real hook (which only re-fires
+ * on focus). For screens that gate a full-screen loading spinner behind
+ * state set inside that callback, this causes a genuine render-phase update
+ * loop (loading flips true → false → true forever) that trips React's "Too
+ * many re-renders" guard. This installs a version that behaves like a normal
+ * mount effect (runs the callback once, after render, via `useEffect`),
+ * which is enough to test the initial load without the bounce.
+ */
+function useFocusEffectOnceMock(callback: () => void): void {
+  useEffect(() => {
+    callback();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+}
+
+export function installFocusEffectOnce(): void {
+  const mockModule = getMockModule();
+  if (!originalUseFocusEffect) {
+    originalUseFocusEffect = mockModule.useFocusEffect;
+  }
+  mockModule.useFocusEffect = useFocusEffectOnceMock;
+}
+
 export function resetNavigationMocks(): void {
   const mockModule = getMockModule();
   if (originalUseNavigation) {
@@ -61,6 +90,9 @@ export function resetNavigationMocks(): void {
   }
   if (originalUseRoute) {
     mockModule.useRoute = originalUseRoute;
+  }
+  if (originalUseFocusEffect) {
+    mockModule.useFocusEffect = originalUseFocusEffect;
   }
 }
 
