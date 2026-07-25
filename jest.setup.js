@@ -19,6 +19,14 @@ jest.mock('expo-file-system/legacy', () => ({
   writeAsStringAsync: jest.fn(),
   readAsStringAsync: jest.fn(),
   deleteAsync: jest.fn(),
+  // Needed by gitIntegration.ts's image-download path (getInfoAsync for the
+  // local cache-hit check, makeDirectoryAsync for the images/ tree). Not
+  // needed by exportImport.ts today, but harmless there.
+  getInfoAsync: jest.fn(),
+  makeDirectoryAsync: jest.fn(),
+  readDirectoryAsync: jest.fn(),
+  copyAsync: jest.fn(),
+  EncodingType: { Base64: 'base64', UTF8: 'utf8' },
 }));
 
 jest.mock('expo-sharing', () => ({
