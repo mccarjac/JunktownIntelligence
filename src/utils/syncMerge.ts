@@ -339,16 +339,37 @@ const mergeCollection = <C extends SyncCollection>(
   return { merged: merged as SyncDataset[C], conflicts, stats };
 };
 
+// A dataset entering this module may not actually satisfy `SyncDataset`'s
+// required-array fields: `local` is always well-formed (exportDataset
+// defaults every collection), but `remote` is whatever JSON the shared
+// repo's data.json happens to contain, and `base` is a snapshot written by
+// a possibly-older version of this app. A collection added after that JSON
+// was written (or dropped by a manual edit) is simply absent, which used to
+// crash `mergeCollection`'s `records.map(...)` with "Cannot read property
+// 'map' of undefined" — normalize every collection to `[]` before merging.
+const normalizeCollections = (dataset: SyncDataset): SyncDataset => ({
+  ...dataset,
+  characters: Array.isArray(dataset.characters) ? dataset.characters : [],
+  factions: Array.isArray(dataset.factions) ? dataset.factions : [],
+  locations: Array.isArray(dataset.locations) ? dataset.locations : [],
+  events: Array.isArray(dataset.events) ? dataset.events : [],
+  quests: Array.isArray(dataset.quests) ? dataset.quests : [],
+});
+
 /**
  * Compute the merge plan for an entire dataset. `discord` is passed through
  * from `remote` untouched — it has its own merge path (see
  * `applyMergedDataset` / `importDiscordDataset`).
  */
 export const computeSyncPlan = (
-  base: SyncDataset | null,
-  local: SyncDataset,
-  remote: SyncDataset
+  rawBase: SyncDataset | null,
+  rawLocal: SyncDataset,
+  rawRemote: SyncDataset
 ): SyncPlan => {
+  const base = rawBase ? normalizeCollections(rawBase) : null;
+  const local = normalizeCollections(rawLocal);
+  const remote = normalizeCollections(rawRemote);
+
   const conflicts: SyncConflict[] = [];
   const stats = {} as Record<SyncCollection, SyncCollectionStats>;
 

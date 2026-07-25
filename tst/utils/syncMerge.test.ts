@@ -241,6 +241,66 @@ describe('computeSyncPlan', () => {
     });
   });
 
+  describe('datasets missing a collection entirely', () => {
+    // Real GitHub data.json files can predate a collection (e.g. quests) or
+    // have it manually stripped, so the field is `undefined` at runtime
+    // despite SyncDataset's type claiming it's always an array. This used to
+    // crash mergeCollection's `records.map(...)` with "Cannot read property
+    // 'map' of undefined".
+    it('treats a missing quests field on the remote dataset as an empty array', () => {
+      const local = makeQuest({ id: 'q1', name: 'Existing quest' });
+      const remoteWithoutQuests = { ...emptyDataset() } as ReturnType<
+        typeof emptyDataset
+      >;
+      // @ts-expect-error simulating a real-world payload missing the field
+      delete remoteWithoutQuests.quests;
+
+      const plan = computeSyncPlan(
+        null,
+        { ...emptyDataset(), quests: [local] },
+        remoteWithoutQuests
+      );
+
+      expect(plan.merged.quests).toEqual([local]);
+      expect(plan.conflicts).toEqual([]);
+    });
+
+    it('treats a missing collection on the base snapshot as an empty array', () => {
+      const remoteQuest = makeQuest({ id: 'q1', name: 'Remote quest' });
+      const baseWithoutQuests = { ...emptyDataset() } as ReturnType<
+        typeof emptyDataset
+      >;
+      // @ts-expect-error simulating an older/corrupt snapshot file
+      delete baseWithoutQuests.quests;
+
+      const plan = computeSyncPlan(baseWithoutQuests, emptyDataset(), {
+        ...emptyDataset(),
+        quests: [remoteQuest],
+      });
+
+      expect(plan.merged.quests).toEqual([remoteQuest]);
+      expect(plan.stats.quests.added).toBe(1);
+      expect(plan.conflicts).toEqual([]);
+    });
+
+    it('treats a missing collection on the local dataset as an empty array', () => {
+      const remoteFaction = makeStoredFaction({ name: 'The Fixers' });
+      const localWithoutFactions = { ...emptyDataset() } as ReturnType<
+        typeof emptyDataset
+      >;
+      // @ts-expect-error simulating a partially-populated local export
+      delete localWithoutFactions.factions;
+
+      const plan = computeSyncPlan(null, localWithoutFactions, {
+        ...emptyDataset(),
+        factions: [remoteFaction],
+      });
+
+      expect(plan.merged.factions).toEqual([remoteFaction]);
+      expect(plan.conflicts).toEqual([]);
+    });
+  });
+
   describe('two-way fallback (no base snapshot)', () => {
     it('flags any differing record as a conflict without a base', () => {
       const local = makeLocation({ name: 'Docks', description: 'local' });
