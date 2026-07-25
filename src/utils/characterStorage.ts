@@ -24,7 +24,6 @@ export interface FactionRelationship {
 export interface StoredFaction {
   name: string;
   description: string;
-  imageUri?: string; // Deprecated: Use imageUris instead
   imageUris?: string[];
   relationships?: FactionRelationship[];
   retired?: boolean;
@@ -37,6 +36,35 @@ interface FactionDataset {
   version: string;
   lastUpdated: string;
 }
+
+// Runtime-only shape for entities that may still carry the deprecated single
+// `imageUri` field. The domain types (GameCharacter, GameLocation, GameEvent,
+// GameQuest, StoredFaction) no longer declare it, but data persisted before
+// this migration still has it on disk.
+interface LegacyImageEntity {
+  imageUri?: string;
+  imageUris?: string[];
+}
+
+// Backfill a legacy single `imageUri` into `imageUris` (when `imageUris` is
+// empty) and strip the deprecated field. Used both for in-memory
+// normalization on every load and for the one-time persisted migration
+// below (`migrateImageUris`).
+const normalizeImageUris = <T extends { imageUris?: string[] }>(
+  entity: T
+): T => {
+  const raw = entity as unknown as T & LegacyImageEntity;
+  if (raw.imageUri === undefined) return entity;
+
+  const { imageUri, ...rest } = raw;
+  const imageUris =
+    rest.imageUris && rest.imageUris.length > 0 ? rest.imageUris : [imageUri];
+
+  return { ...rest, imageUris } as T;
+};
+
+const hasLegacyImageUri = (entity: { imageUris?: string[] }): boolean =>
+  (entity as unknown as LegacyImageEntity).imageUri !== undefined;
 
 const STORAGE_KEY = 'gameCharacterManager';
 const FACTION_STORAGE_KEY = 'gameCharacterManager_factions';
@@ -61,12 +89,14 @@ export const loadCharacters = async (): Promise<GameCharacter[]> => {
   if (!dataset || !dataset.characters) return [];
 
   // Handle backward compatibility - set defaults for missing properties
-  return dataset.characters.map(character => ({
-    ...character,
-    present: character.present ?? false,
-    retired: character.retired ?? false,
-    relationships: character.relationships ?? [],
-  }));
+  return dataset.characters.map(character =>
+    normalizeImageUris({
+      ...character,
+      present: character.present ?? false,
+      retired: character.retired ?? false,
+      relationships: character.relationships ?? [],
+    })
+  );
 };
 
 export const addCharacter = async (
@@ -280,8 +310,11 @@ export const importDataset = async (jsonData: string): Promise<boolean> => {
       const existingLocations = await loadLocations();
       const mergedLocations = [...existingLocations];
 
-      // Add or update locations from import
-      for (const importedLocation of dataset.locations) {
+      // Add or update locations from import. Normalize any legacy single
+      // `imageUri` from an older export/repo into `imageUris` so storage
+      // never picks the deprecated field back up.
+      for (const rawImportedLocation of dataset.locations) {
+        const importedLocation = normalizeImageUris(rawImportedLocation);
         const existingIndex = mergedLocations.findIndex(
           l => l.id === importedLocation.id
         );
@@ -308,9 +341,10 @@ export const importDataset = async (jsonData: string): Promise<boolean> => {
       await ensureLocationsExist(dataset.characters);
     }
 
-    // Handle character data
+    // Handle character data. Normalize any legacy single `imageUri` from an
+    // older export/repo into `imageUris` before persisting.
     const characterDataset: CharacterDataset = {
-      characters: dataset.characters || [],
+      characters: (dataset.characters || []).map(normalizeImageUris),
       version: dataset.version || '1.0',
       lastUpdated: dataset.lastUpdated || new Date().toISOString(),
     };
@@ -319,7 +353,7 @@ export const importDataset = async (jsonData: string): Promise<boolean> => {
     // Handle faction data if present
     if (dataset.factions) {
       const factionDataset: FactionDataset = {
-        factions: dataset.factions,
+        factions: dataset.factions.map(normalizeImageUris),
         version: dataset.version || '1.0',
         lastUpdated: dataset.lastUpdated || new Date().toISOString(),
       };
@@ -332,7 +366,7 @@ export const importDataset = async (jsonData: string): Promise<boolean> => {
     // Handle event data if present
     if (dataset.events) {
       const eventDataset: EventDataset = {
-        events: dataset.events,
+        events: dataset.events.map(normalizeImageUris),
         version: dataset.version || '1.0',
         lastUpdated: dataset.lastUpdated || new Date().toISOString(),
       };
@@ -342,7 +376,7 @@ export const importDataset = async (jsonData: string): Promise<boolean> => {
     // Handle quest data if present
     if (dataset.quests) {
       const questDataset: QuestDataset = {
-        quests: dataset.quests,
+        quests: dataset.quests.map(normalizeImageUris),
         version: dataset.version || '1.0',
         lastUpdated: dataset.lastUpdated || new Date().toISOString(),
       };
@@ -463,7 +497,6 @@ const mergeCharacterProperties = (
     'name',
     'species',
     'locationId',
-    'imageUri',
     'notes',
   ];
 
@@ -500,7 +533,9 @@ const mergeImportedCharacters = (
   const addedCharacters: GameCharacter[] = [];
   const conflicts: MergeConflict[] = [];
 
-  for (const importedChar of importedCharacters) {
+  // Normalize any legacy single `imageUri` from an older export/repo into
+  // `imageUris` before it can be merged/pushed into storage.
+  for (const importedChar of importedCharacters.map(normalizeImageUris)) {
     const existingIndex = currentData.findIndex(
       current => current.id === importedChar.id
     );
@@ -544,7 +579,9 @@ const applyFactionMerge = async (
   const mergedFactions = [...currentFactions];
   const existingFactionNames = new Set(currentFactions.map(f => f.name));
 
-  for (const importedFaction of importedFactions) {
+  // Normalize any legacy single `imageUri` from an older export/repo into
+  // `imageUris` before it can be merged/pushed into storage.
+  for (const importedFaction of importedFactions.map(normalizeImageUris)) {
     if (!existingFactionNames.has(importedFaction.name)) {
       mergedFactions.push(importedFaction);
     } else {
@@ -572,7 +609,9 @@ const applyLocationMerge = async (
   const mergedLocations = [...currentLocations];
   const existingLocationIds = new Set(currentLocations.map(l => l.id));
 
-  for (const importedLocation of importedLocations) {
+  // Normalize any legacy single `imageUri` from an older export/repo into
+  // `imageUris` before it can be merged/pushed into storage.
+  for (const importedLocation of importedLocations.map(normalizeImageUris)) {
     if (!existingLocationIds.has(importedLocation.id)) {
       mergedLocations.push(importedLocation);
     } else {
@@ -728,11 +767,13 @@ export const loadFactions = async (): Promise<StoredFaction[]> => {
   if (!dataset) return [];
 
   // Handle backward compatibility - set defaults for missing properties
-  return (dataset.factions || []).map(faction => ({
-    ...faction,
-    retired: faction.retired ?? false,
-    relationships: faction.relationships ?? [],
-  }));
+  return (dataset.factions || []).map(faction =>
+    normalizeImageUris({
+      ...faction,
+      retired: faction.retired ?? false,
+      relationships: faction.relationships ?? [],
+    })
+  );
 };
 
 export const getFactionDescription = async (
@@ -843,7 +884,6 @@ export const deleteFactionCompletely = async (
 export const createFaction = async (factionData: {
   name: string;
   description: string;
-  imageUri?: string;
   imageUris?: string[];
   relationships?: FactionRelationship[];
   retired?: boolean;
@@ -863,7 +903,6 @@ export const createFaction = async (factionData: {
     const newFaction: StoredFaction = {
       name: factionData.name,
       description: factionData.description,
-      imageUri: factionData.imageUri,
       imageUris: factionData.imageUris,
       relationships: factionData.relationships || [],
       retired: factionData.retired ?? false,
@@ -906,7 +945,6 @@ export const updateFaction = async (
   updates: {
     name?: string;
     description?: string;
-    imageUri?: string;
     imageUris?: string[];
     relationships?: FactionRelationship[];
     retired?: boolean;
@@ -1145,6 +1183,84 @@ export const migrateFactionDescriptions = async (): Promise<void> => {
   }
 };
 
+// Migration function to backfill the deprecated single `imageUri` field into
+// `imageUris` and strip it from persisted records. Idempotent - safe to call
+// on every app start (see CharacterListScreen.loadData).
+export const migrateImageUris = async (): Promise<void> => {
+  try {
+    await runExclusive(STORAGE_KEY, async () => {
+      const dataset =
+        await SafeAsyncStorageJSONParser.getItem<CharacterDataset>(STORAGE_KEY);
+      const characters = dataset?.characters;
+      if (!characters?.some(hasLegacyImageUri)) return;
+
+      await saveCharacters(characters.map(normalizeImageUris));
+    });
+  } catch (error) {
+    console.error('Error migrating character image URIs:', error);
+  }
+
+  try {
+    await runExclusive(FACTION_STORAGE_KEY, async () => {
+      const dataset =
+        await SafeAsyncStorageJSONParser.getItem<FactionDataset>(
+          FACTION_STORAGE_KEY
+        );
+      const factions = dataset?.factions;
+      if (!factions?.some(hasLegacyImageUri)) return;
+
+      await saveFactions(factions.map(normalizeImageUris));
+    });
+  } catch (error) {
+    console.error('Error migrating faction image URIs:', error);
+  }
+
+  try {
+    await runExclusive(LOCATION_STORAGE_KEY, async () => {
+      const dataset =
+        await SafeAsyncStorageJSONParser.getItem<LocationDataset>(
+          LOCATION_STORAGE_KEY
+        );
+      const locations = dataset?.locations;
+      if (!locations?.some(hasLegacyImageUri)) return;
+
+      await saveLocations(locations.map(normalizeImageUris));
+    });
+  } catch (error) {
+    console.error('Error migrating location image URIs:', error);
+  }
+
+  try {
+    await runExclusive(EVENT_STORAGE_KEY, async () => {
+      const dataset =
+        await SafeAsyncStorageJSONParser.getItem<EventDataset>(
+          EVENT_STORAGE_KEY
+        );
+      const events = dataset?.events;
+      if (!events?.some(hasLegacyImageUri)) return;
+
+      await saveEvents(events.map(normalizeImageUris));
+    });
+  } catch (error) {
+    console.error('Error migrating event image URIs:', error);
+  }
+
+  try {
+    await runExclusive(QUEST_STORAGE_KEY, async () => {
+      const dataset =
+        await SafeAsyncStorageJSONParser.getItem<QuestDataset>(
+          QUEST_STORAGE_KEY
+        );
+      const quests = dataset?.quests;
+      if (!quests?.some(hasLegacyImageUri)) return;
+
+      await saveQuests(quests.map(normalizeImageUris));
+    });
+  } catch (error) {
+    console.error('Error migrating quest image URIs:', error);
+  }
+};
+
 // Location management functions
 export const saveLocations = async (
   locations: GameLocation[]
@@ -1164,7 +1280,7 @@ export const loadLocations = async (): Promise<GameLocation[]> => {
     );
   if (!dataset) return [];
 
-  return dataset.locations || [];
+  return (dataset.locations || []).map(normalizeImageUris);
 };
 
 export const getLocation = async (
@@ -1177,7 +1293,6 @@ export const getLocation = async (
 export const createLocation = async (locationData: {
   name: string;
   description: string;
-  imageUri?: string;
   imageUris?: string[];
 }): Promise<GameLocation | null> =>
   runExclusive(LOCATION_STORAGE_KEY, async () => {
@@ -1196,7 +1311,6 @@ export const createLocation = async (locationData: {
       id: uuidv4(),
       name: locationData.name,
       description: locationData.description,
-      imageUri: locationData.imageUri,
       imageUris: locationData.imageUris,
       createdAt: now,
       updatedAt: now,
@@ -1302,7 +1416,7 @@ export const loadEvents = async (): Promise<GameEvent[]> => {
     await SafeAsyncStorageJSONParser.getItem<EventDataset>(EVENT_STORAGE_KEY);
   if (!dataset) return [];
 
-  return dataset.events || [];
+  return (dataset.events || []).map(normalizeImageUris);
 };
 
 export const createEvent = async (
@@ -1409,7 +1523,7 @@ export const loadQuests = async (): Promise<GameQuest[]> => {
     await SafeAsyncStorageJSONParser.getItem<QuestDataset>(QUEST_STORAGE_KEY);
   if (!dataset) return [];
 
-  return dataset.quests || [];
+  return (dataset.quests || []).map(normalizeImageUris);
 };
 
 export const createQuest = async (

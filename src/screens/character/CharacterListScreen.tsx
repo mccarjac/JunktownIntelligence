@@ -12,6 +12,7 @@ import {
   loadCharacters,
   toggleCharacterPresent,
   resetAllPresentStatus,
+  migrateImageUris,
 } from '@utils/characterStorage';
 import {
   useNavigation,
@@ -40,6 +41,9 @@ export const CharacterListScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
 
   const loadData = React.useCallback(async () => {
+    // Run migration on first load (idempotent operation)
+    await migrateImageUris();
+
     const data = await loadCharacters();
     setCharacters(data);
   }, []);

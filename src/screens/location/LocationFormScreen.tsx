@@ -27,7 +27,6 @@ type LocationFormRouteProp = RouteProp<RootStackParamList, 'LocationForm'>;
 interface LocationFormData {
   name: string;
   description: string;
-  imageUri?: string;
   imageUris?: string[];
 }
 
@@ -39,7 +38,6 @@ export const LocationFormScreen: React.FC = () => {
   const [formData, setFormData] = useState<LocationFormData>({
     name: '',
     description: '',
-    imageUri: undefined,
     imageUris: [],
   });
 
@@ -52,9 +50,7 @@ export const LocationFormScreen: React.FC = () => {
       setFormData({
         name: location.name,
         description: location.description,
-        imageUri: location.imageUri,
-        imageUris:
-          location.imageUris || (location.imageUri ? [location.imageUri] : []),
+        imageUris: location.imageUris || [],
       });
     }
   }, [location]);
@@ -86,7 +82,6 @@ export const LocationFormScreen: React.FC = () => {
       setFormData({
         ...formData,
         imageUris: newImages,
-        imageUri: newImages[0], // Keep first image for backward compatibility
       });
     }
   };
@@ -97,7 +92,6 @@ export const LocationFormScreen: React.FC = () => {
     setFormData({
       ...formData,
       imageUris: newImages,
-      imageUri: newImages.length > 0 ? newImages[0] : undefined,
     });
   };
 
@@ -127,7 +121,6 @@ export const LocationFormScreen: React.FC = () => {
         const updated = await updateLocation(location.id, {
           name: formData.name.trim(),
           description: formData.description.trim(),
-          imageUri: formData.imageUri,
           imageUris: formData.imageUris,
         });
 
@@ -146,7 +139,6 @@ export const LocationFormScreen: React.FC = () => {
         const newLocation = await createLocation({
           name: formData.name.trim(),
           description: formData.description.trim(),
-          imageUri: formData.imageUri,
           imageUris: formData.imageUris,
         });
 

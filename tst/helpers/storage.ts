@@ -22,6 +22,7 @@ export function primeStorageDefaults(): void {
   storage.loadQuests.mockResolvedValue([]);
   storage.getFactionDescription.mockResolvedValue('');
   storage.migrateFactionDescriptions.mockResolvedValue(undefined);
+  storage.migrateImageUris.mockResolvedValue(undefined);
   storage.getLocation.mockResolvedValue(null);
   storage.getAllStoredFactions.mockResolvedValue([]);
 }
