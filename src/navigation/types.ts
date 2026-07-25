@@ -14,6 +14,7 @@ export type RootDrawerParamList = {
   Events: undefined;
   Quests: undefined;
   InfluenceReport: undefined;
+  RelationshipGraph: undefined;
   DiscordConfig: undefined;
   DiscordServers: undefined;
   DiscordCharacterMapping: undefined;
