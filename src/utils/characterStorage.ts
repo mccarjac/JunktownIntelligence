@@ -8,12 +8,14 @@ import {
   GameQuest,
   QuestDataset,
   RelationshipStanding,
+  DiscordDataset,
 } from '@models/types';
 import { v4 as uuidv4 } from 'uuid';
 import { SafeAsyncStorageJSONParser } from './safeAsyncStorageJSONParser';
 import { exportDiscordDataset, importDiscordDataset } from './discordStorage';
 import { sortDatasetDeterministically } from './datasetSorting';
 import { runExclusive } from './storageQueue';
+import type { SyncDataset } from './syncMerge';
 
 export interface FactionRelationship {
   factionName: string;
@@ -665,6 +667,48 @@ export const mergeDatasetWithConflictResolution = async (
       merged: [],
       added: [],
     };
+  }
+};
+
+/**
+ * Write a fully-resolved sync merge result (see `computeSyncPlan` /
+ * `applyResolutions` in `syncMerge.ts`) to storage exactly as given. Unlike
+ * `importDataset`, this never re-applies its own merge heuristics — the
+ * dataset here is already the final intended state for every collection, so
+ * writing anything else (e.g. location's newer-wins) would silently distort
+ * a resolution the user already made.
+ */
+export const applyMergedDataset = async (
+  dataset: SyncDataset
+): Promise<boolean> => {
+  try {
+    await migrateOldLocationData(dataset.characters);
+    await ensureLocationsExist(dataset.characters);
+
+    // Each key is serialized against other mutators on that same key; never
+    // nest these calls for the same key (see AGENTS.md).
+    await runExclusive(STORAGE_KEY, () => saveCharacters(dataset.characters));
+    await runExclusive(FACTION_STORAGE_KEY, () =>
+      saveFactions(dataset.factions)
+    );
+    await runExclusive(LOCATION_STORAGE_KEY, () =>
+      saveLocations(dataset.locations)
+    );
+    await runExclusive(EVENT_STORAGE_KEY, () => saveEvents(dataset.events));
+    await runExclusive(QUEST_STORAGE_KEY, () => saveQuests(dataset.quests));
+
+    if (dataset.discord) {
+      await importDiscordDataset(dataset.discord as DiscordDataset, true);
+    }
+
+    // Merged quests/events come from two sides, so the mirrored
+    // eventIds/questIds back-references need reconciling afterward.
+    await reconcileQuestEventLinks();
+
+    return true;
+  } catch (error) {
+    console.error('Error applying merged dataset:', error);
+    return false;
   }
 };
 

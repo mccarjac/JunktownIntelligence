@@ -164,9 +164,9 @@ export const DataManagementScreen: React.FC = () => {
     }
 
     setTokenValidating(true);
-    const isValid = await verifyGitHubToken(tokenInput.trim());
+    const { valid, error } = await verifyGitHubToken(tokenInput.trim());
 
-    if (isValid) {
+    if (valid) {
       const config = await getGitHubConfig();
       await saveGitHubConfig({ ...config, token: tokenInput.trim() });
       setTokenValidating(false);
@@ -178,8 +178,9 @@ export const DataManagementScreen: React.FC = () => {
     } else {
       setTokenValidating(false);
       Alert.alert(
-        'Invalid Token',
-        'The token you entered is invalid. Please check and try again.',
+        error?.kind === 'offline' ? 'Offline' : 'Invalid Token',
+        error?.message ||
+          'The token you entered is invalid. Please check and try again.',
         [{ text: 'OK' }]
       );
     }

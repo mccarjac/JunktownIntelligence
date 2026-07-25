@@ -2,8 +2,16 @@ import { Octokit } from '@octokit/rest';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Alert } from 'react-native';
 import { Buffer } from 'buffer';
-import { exportDataset } from './characterStorage';
+import { exportDataset, applyMergedDataset } from './characterStorage';
 import { sortDatasetDeterministically } from './datasetSorting';
+import { classifySyncError, SyncError, SyncErrorKind } from './syncErrors';
+import {
+  computeSyncPlan,
+  applyResolutions,
+  ConflictResolution,
+  SyncDataset,
+  SyncPlan,
+} from './syncMerge';
 
 /**
  * Configuration for the data library repository
@@ -33,9 +41,29 @@ const extractImageData = (
  */
 const GITHUB_CONFIG_KEY = '@github_config';
 
-interface GitHubConfig {
+// The dataset snapshot as it stood at the end of the last successful sync
+// (see computeGitHubSyncPlan/applyGitHubSyncPlan). This is the three-way
+// merge base: it lets a later sync tell "you changed this" apart from "they
+// changed this" instead of only seeing the current local/remote states.
+const SYNC_BASE_KEY = '@github_sync_base.json';
+
+export interface GitHubSyncState {
+  // Head commit of DATA_REPO_BRANCH at the end of the last successful merge
+  // sync. A pushed export opens a PR — main does not move until a human
+  // merges it — so this is only ever updated by a completed merge sync, not
+  // by exportToGitHub.
+  baseCommitSha?: string;
+  // Blob sha of data.json at that same point, for a cheaper moved-check.
+  baseDataSha?: string;
+  pulledAt?: string;
+  lastPushedPrUrl?: string;
+  lastPushedAt?: string;
+}
+
+export interface GitHubConfig {
   token?: string;
   lastSync?: string;
+  sync?: GitHubSyncState;
 }
 
 /**
@@ -66,6 +94,30 @@ export const saveGitHubConfig = async (config: GitHubConfig): Promise<void> => {
   }
 };
 
+// The merge-base snapshot is stored separately from GitHubConfig because it
+// is a full dataset (potentially large) rather than a few config fields.
+const getSyncBaseSnapshot = async (): Promise<SyncDataset | null> => {
+  try {
+    const raw = await FileSystem.readAsStringAsync(
+      FileSystem.documentDirectory + SYNC_BASE_KEY
+    );
+    return JSON.parse(raw) as SyncDataset;
+  } catch {
+    return null;
+  }
+};
+
+const saveSyncBaseSnapshot = async (dataset: SyncDataset): Promise<void> => {
+  try {
+    await FileSystem.writeAsStringAsync(
+      FileSystem.documentDirectory + SYNC_BASE_KEY,
+      JSON.stringify(dataset)
+    );
+  } catch (error) {
+    console.error('Failed to save GitHub sync base snapshot:', error);
+  }
+};
+
 /**
  * Initialize Octokit with token
  */
@@ -78,15 +130,18 @@ const getOctokit = async (): Promise<Octokit | null> => {
 };
 
 /**
- * Verify GitHub token is valid
+ * Verify a GitHub token is valid. Failure is classified so a dropped
+ * connection is reported as "offline" rather than "invalid token".
  */
-export const verifyGitHubToken = async (token: string): Promise<boolean> => {
+export const verifyGitHubToken = async (
+  token: string
+): Promise<{ valid: boolean; error?: SyncError }> => {
   try {
     const octokit = new Octokit({ auth: token });
     await octokit.rest.users.getAuthenticated();
-    return true;
-  } catch {
-    return false;
+    return { valid: true };
+  } catch (error) {
+    return { valid: false, error: classifySyncError(error) };
   }
 };
 
@@ -95,7 +150,7 @@ export const verifyGitHubToken = async (token: string): Promise<boolean> => {
  */
 const verifyRepository = async (
   octokit: Octokit
-): Promise<{ exists: boolean; error?: string }> => {
+): Promise<{ exists: boolean; error?: string; errorKind?: SyncErrorKind }> => {
   try {
     await octokit.rest.repos.get({
       owner: DATA_REPO_OWNER,
@@ -103,36 +158,39 @@ const verifyRepository = async (
     });
     return { exists: true };
   } catch (error) {
-    if (error && typeof error === 'object' && 'status' in error) {
-      const status = (error as { status: number }).status;
-      if (status === 404) {
-        return {
-          exists: false,
-          error: `Repository ${DATA_REPO_OWNER}/${DATA_REPO_NAME} not found. Please ensure the repository exists and your token has access to it.`,
-        };
-      }
-      if (status === 403) {
-        return {
-          exists: false,
-          error: 'Access denied. Please check your token permissions.',
-        };
-      }
-    }
+    const classified = classifySyncError(error);
     return {
       exists: false,
-      error: 'Failed to verify repository access.',
+      error: classified.message,
+      errorKind: classified.kind,
     };
   }
+};
+
+const getMainHeadSha = async (octokit: Octokit): Promise<string> => {
+  const { data: ref } = await octokit.rest.git.getRef({
+    owner: DATA_REPO_OWNER,
+    repo: DATA_REPO_NAME,
+    ref: `heads/${DATA_REPO_BRANCH}`,
+  });
+  return ref.object.sha;
 };
 
 /**
  * Export data to GitHub repository by creating a Pull Request
  */
-export const exportToGitHub = async (): Promise<{
+export const exportToGitHub = async (
+  options: { force?: boolean } = {}
+): Promise<{
   success: boolean;
   prUrl?: string;
   error?: string;
+  errorKind?: SyncErrorKind;
+  remoteMoved?: boolean;
 }> => {
+  let octokitForCleanup: Octokit | null = null;
+  let branchNameForCleanup: string | undefined;
+
   try {
     const octokit = await getOctokit();
     if (!octokit) {
@@ -141,6 +199,7 @@ export const exportToGitHub = async (): Promise<{
         error: 'GitHub token not configured. Please set up your token first.',
       };
     }
+    octokitForCleanup = octokit;
 
     // Verify repository exists and is accessible
     const repoCheck = await verifyRepository(octokit);
@@ -148,6 +207,7 @@ export const exportToGitHub = async (): Promise<{
       return {
         success: false,
         error: repoCheck.error || 'Repository verification failed.',
+        errorKind: repoCheck.errorKind,
       };
     }
 
@@ -156,12 +216,22 @@ export const exportToGitHub = async (): Promise<{
     const branchName = `data-export-${Date.now()}`;
 
     // Get the default branch's latest commit SHA
-    const { data: ref } = await octokit.rest.git.getRef({
-      owner: DATA_REPO_OWNER,
-      repo: DATA_REPO_NAME,
-      ref: `heads/${DATA_REPO_BRANCH}`,
-    });
-    const baseSha = ref.object.sha;
+    const baseSha = await getMainHeadSha(octokit);
+
+    // Warn (unless forced) when the shared repo has moved since the last
+    // completed merge sync. main only advances via a merged PR, so this
+    // means someone else's changes aren't reflected locally yet.
+    const config = await getGitHubConfig();
+    const knownBaseSha = config.sync?.baseCommitSha;
+    if (!options.force && knownBaseSha && knownBaseSha !== baseSha) {
+      return {
+        success: false,
+        remoteMoved: true,
+        errorKind: 'conflict',
+        error:
+          'The repository has changed since your last sync. Sync from GitHub first to merge in the latest changes, or export anyway to open a PR against the current state.',
+      };
+    }
 
     // Create a new branch from the base
     await octokit.rest.git.createRef({
@@ -170,6 +240,7 @@ export const exportToGitHub = async (): Promise<{
       ref: `refs/heads/${branchName}`,
       sha: baseSha,
     });
+    branchNameForCleanup = branchName;
 
     // Export all data
     const jsonData = await exportDataset();
@@ -495,11 +566,17 @@ export const exportToGitHub = async (): Promise<{
 Please review the changes before merging.`,
     });
 
-    // Update last sync time
-    const config = await getGitHubConfig();
+    // Record the push. main hasn't moved (a PR doesn't merge itself), so
+    // sync.baseCommitSha is deliberately left untouched — only a completed
+    // merge sync (applyGitHubSyncPlan) advances the merge base.
     await saveGitHubConfig({
       ...config,
       lastSync: new Date().toISOString(),
+      sync: {
+        ...config.sync,
+        lastPushedPrUrl: pr.html_url,
+        lastPushedAt: new Date().toISOString(),
+      },
     });
 
     return {
@@ -508,10 +585,26 @@ Please review the changes before merging.`,
     };
   } catch (error) {
     console.error('Export to GitHub failed:', error);
+
+    // Best-effort cleanup of a branch this run created — the classified
+    // error below is what actually gets reported either way.
+    if (branchNameForCleanup && octokitForCleanup) {
+      try {
+        await octokitForCleanup.rest.git.deleteRef({
+          owner: DATA_REPO_OWNER,
+          repo: DATA_REPO_NAME,
+          ref: `heads/${branchNameForCleanup}`,
+        });
+      } catch {
+        // Cleanup failure isn't actionable for the user; nothing to do.
+      }
+    }
+
+    const classified = classifySyncError(error);
     return {
       success: false,
-      error:
-        error instanceof Error ? error.message : 'An unexpected error occurred',
+      error: classified.message,
+      errorKind: classified.kind,
     };
   }
 };
@@ -523,6 +616,7 @@ export const importFromGitHub = async (): Promise<{
   success: boolean;
   data?: string;
   error?: string;
+  errorKind?: SyncErrorKind;
 }> => {
   try {
     const octokit = await getOctokit();
@@ -539,6 +633,7 @@ export const importFromGitHub = async (): Promise<{
       return {
         success: false,
         error: repoCheck.error || 'Repository verification failed.',
+        errorKind: repoCheck.errorKind,
       };
     }
 
@@ -826,14 +921,16 @@ export const importFromGitHub = async (): Promise<{
       return {
         success: false,
         error: 'File not found or is a directory',
+        errorKind: 'notFound',
       };
     }
   } catch (error) {
     console.error('Import from GitHub failed:', error);
+    const classified = classifySyncError(error);
     return {
       success: false,
-      error:
-        error instanceof Error ? error.message : 'An unexpected error occurred',
+      error: classified.message,
+      errorKind: classified.kind,
     };
   }
 };
@@ -856,8 +953,8 @@ export const showGitHubTokenDialog = (): Promise<string | null> => {
           text: 'Save',
           onPress: async (token?: string) => {
             if (token && token.trim()) {
-              const isValid = await verifyGitHubToken(token.trim());
-              if (isValid) {
+              const { valid, error } = await verifyGitHubToken(token.trim());
+              if (valid) {
                 const config = await getGitHubConfig();
                 await saveGitHubConfig({ ...config, token: token.trim() });
                 Alert.alert('Success', 'GitHub token saved successfully!', [
@@ -866,8 +963,9 @@ export const showGitHubTokenDialog = (): Promise<string | null> => {
                 resolve(token.trim());
               } else {
                 Alert.alert(
-                  'Invalid Token',
-                  'The token you entered is invalid. Please check and try again.',
+                  error?.kind === 'offline' ? 'Offline' : 'Invalid Token',
+                  error?.message ||
+                    'The token you entered is invalid. Please check and try again.',
                   [{ text: 'OK' }]
                 );
                 resolve(null);
@@ -881,6 +979,110 @@ export const showGitHubTokenDialog = (): Promise<string | null> => {
       'plain-text'
     );
   });
+};
+
+export interface GitHubSyncPlanResult {
+  success: boolean;
+  plan?: SyncPlan;
+  // Head commit of DATA_REPO_BRANCH at the moment this plan was computed;
+  // pass it through to applyGitHubSyncPlan so the merge base can be
+  // recorded against the exact remote state this plan was built from.
+  remoteCommitSha?: string;
+  error?: string;
+  errorKind?: SyncErrorKind;
+}
+
+/**
+ * Fetch the remote dataset (reusing importFromGitHub's fetch + image
+ * download), load the local dataset, and compute a three-way merge plan
+ * against the last-synced base snapshot. Does not write anything — call
+ * `applyGitHubSyncPlan` with the user's conflict resolutions to persist it.
+ */
+export const computeGitHubSyncPlan =
+  async (): Promise<GitHubSyncPlanResult> => {
+    try {
+      const remoteResult = await importFromGitHub();
+      if (!remoteResult.success || !remoteResult.data) {
+        return {
+          success: false,
+          error: remoteResult.error,
+          errorKind: remoteResult.errorKind,
+        };
+      }
+
+      const octokit = await getOctokit();
+      if (!octokit) {
+        return {
+          success: false,
+          error: 'GitHub token not configured. Please set up your token first.',
+        };
+      }
+      const remoteCommitSha = await getMainHeadSha(octokit);
+
+      const remote = JSON.parse(remoteResult.data) as SyncDataset;
+      const local = JSON.parse(await exportDataset()) as SyncDataset;
+      const base = await getSyncBaseSnapshot();
+
+      return {
+        success: true,
+        plan: computeSyncPlan(base, local, remote),
+        remoteCommitSha,
+      };
+    } catch (error) {
+      console.error('Computing GitHub sync plan failed:', error);
+      const classified = classifySyncError(error);
+      return {
+        success: false,
+        error: classified.message,
+        errorKind: classified.kind,
+      };
+    }
+  };
+
+/**
+ * Apply a sync plan (with the user's per-conflict resolutions) to local
+ * storage, then record the merge base for the next sync: the merged dataset
+ * itself (not the raw remote fetch — conflicts resolved to "local" must
+ * still look unchanged next time) plus the remote commit SHA it was merged
+ * against.
+ */
+export const applyGitHubSyncPlan = async (
+  plan: SyncPlan,
+  resolutions: Record<string, ConflictResolution>,
+  remoteCommitSha: string
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const merged = applyResolutions(plan, resolutions);
+    const applied = await applyMergedDataset(merged);
+    if (!applied) {
+      return {
+        success: false,
+        error: 'Failed to save the merged data locally.',
+      };
+    }
+
+    await saveSyncBaseSnapshot(merged);
+
+    const config = await getGitHubConfig();
+    await saveGitHubConfig({
+      ...config,
+      lastSync: new Date().toISOString(),
+      sync: {
+        ...config.sync,
+        baseCommitSha: remoteCommitSha,
+        pulledAt: new Date().toISOString(),
+      },
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('Applying GitHub sync plan failed:', error);
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : 'An unexpected error occurred',
+    };
+  }
 };
 
 /**
