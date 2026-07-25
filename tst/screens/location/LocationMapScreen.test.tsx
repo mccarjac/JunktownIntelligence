@@ -1,47 +1,38 @@
 import React from 'react';
 import { Image } from 'react-native';
-import { render, waitFor } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
+import { Gesture } from 'react-native-gesture-handler';
 import { LocationMapScreen } from '@screens/location/LocationMapScreen';
+import { getStorageMock, primeStorageDefaults } from '../../helpers/storage';
+import { makeLocation } from '../../helpers/factories';
+import {
+  installNavigationMock,
+  resetNavigationMocks,
+} from '../../helpers/navigation';
 
-/**
- * The global `react-native-reanimated` and `react-native-gesture-handler`
- * mocks (jest.setup.js) only cover what the templated list/detail/form
- * screens need. LocationMapScreen is the sole user of shared-value
- * animations and gesture composition, so it needs its own local mocks —
- * simple passthroughs are enough to exercise the mount/resize behavior
- * without a real gesture/animation engine.
- */
-jest.mock('react-native-reanimated', () => ({
-  __esModule: true,
-  default: {
-    View: 'Animated.View',
-    Image: 'Animated.Image',
-    createAnimatedComponent: (component: unknown) => component,
-  },
-  useSharedValue: (initial: number) => ({ value: initial }),
-  useAnimatedStyle: (factory: () => unknown) => factory(),
-  withTiming: (value: number) => value,
-}));
+jest.mock('@utils/characterStorage');
 
-const chainable = () => {
-  const gesture: Record<string, jest.Mock> = {};
-  ['onUpdate', 'onEnd', 'numberOfTaps'].forEach(method => {
-    gesture[method] = jest.fn(() => gesture);
-  });
-  return gesture;
+const storage = getStorageMock();
+
+// Small, well below any real screen size, so the fit-to-screen scale in
+// LocationMapScreen never kicks in and imageSize == {300, 200} exactly.
+const IMAGE_SIZE = { width: 300, height: 200 };
+
+const getLatestLongPressStub = () => {
+  const results = (Gesture.LongPress as jest.Mock).mock.results;
+  return results[results.length - 1].value;
 };
 
-jest.mock('react-native-gesture-handler', () => ({
-  GestureDetector: ({ children }: { children: React.ReactNode }) => children,
-  Gesture: {
-    Pinch: () => chainable(),
-    Pan: () => chainable(),
-    Tap: () => chainable(),
-    Simultaneous: (...gestures: unknown[]) => gestures,
-  },
-}));
-
 describe('LocationMapScreen', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    primeStorageDefaults();
+  });
+
+  afterEach(() => {
+    resetNavigationMocks();
+  });
+
   it('shows a loading state before the map asset size resolves', () => {
     jest.spyOn(Image, 'resolveAssetSource').mockReturnValue(undefined as any);
 
@@ -50,19 +41,125 @@ describe('LocationMapScreen', () => {
     expect(getByText('Loading map...')).toBeTruthy();
   });
 
-  it('renders the map image once the asset size resolves', async () => {
+  it('renders markers only for locations that have map coordinates', async () => {
     jest.spyOn(Image, 'resolveAssetSource').mockReturnValue({
-      width: 1000,
-      height: 500,
-      uri: 'mock-map-uri',
+      width: IMAGE_SIZE.width,
+      height: IMAGE_SIZE.height,
+      uri: 'test-map-uri',
       scale: 1,
     });
+    storage.loadLocations.mockResolvedValue([
+      makeLocation({
+        id: 'loc-placed',
+        name: 'The Docks',
+        mapCoordinates: { x: 0.5, y: 0.5 },
+      }),
+      makeLocation({ id: 'loc-unplaced', name: 'Rust Alley' }),
+    ]);
 
-    const { queryByText, UNSAFE_getByType } = render(<LocationMapScreen />);
+    const { getByLabelText, queryByLabelText } = render(<LocationMapScreen />);
 
     await waitFor(() => {
-      expect(queryByText('Loading map...')).toBeNull();
+      expect(getByLabelText('The Docks')).toBeTruthy();
     });
-    expect(UNSAFE_getByType('Animated.Image' as never)).toBeTruthy();
+    expect(queryByLabelText('Rust Alley')).toBeNull();
+  });
+
+  it('shows the info card with a "View details" link when a marker is pressed', async () => {
+    jest.spyOn(Image, 'resolveAssetSource').mockReturnValue({
+      width: IMAGE_SIZE.width,
+      height: IMAGE_SIZE.height,
+      uri: 'test-map-uri',
+      scale: 1,
+    });
+    storage.loadLocations.mockResolvedValue([
+      makeLocation({
+        id: 'loc-1',
+        name: 'The Docks',
+        description: 'A rundown pier.',
+        mapCoordinates: { x: 0.5, y: 0.5 },
+      }),
+    ]);
+
+    const { getByLabelText, findByText } = render(<LocationMapScreen />);
+
+    const marker = await waitFor(() => getByLabelText('The Docks'));
+    fireEvent.press(marker);
+
+    expect(await findByText('A rundown pier.')).toBeTruthy();
+    expect(await findByText('View details')).toBeTruthy();
+  });
+
+  it('navigates to LocationDetails with the location id from the info card', async () => {
+    jest.spyOn(Image, 'resolveAssetSource').mockReturnValue({
+      width: IMAGE_SIZE.width,
+      height: IMAGE_SIZE.height,
+      uri: 'test-map-uri',
+      scale: 1,
+    });
+    storage.loadLocations.mockResolvedValue([
+      makeLocation({
+        id: 'loc-1',
+        name: 'The Docks',
+        mapCoordinates: { x: 0.5, y: 0.5 },
+      }),
+    ]);
+    const nav = installNavigationMock();
+
+    const { getByLabelText, findByText } = render(<LocationMapScreen />);
+
+    const marker = await waitFor(() => getByLabelText('The Docks'));
+    fireEvent.press(marker);
+
+    fireEvent.press(await findByText('View details'));
+
+    expect(nav.navigate).toHaveBeenCalledWith('LocationDetails', {
+      locationId: 'loc-1',
+    });
+  });
+
+  it('places a location at the long-pressed coordinates via the picker', async () => {
+    jest.spyOn(Image, 'resolveAssetSource').mockReturnValue({
+      width: IMAGE_SIZE.width,
+      height: IMAGE_SIZE.height,
+      uri: 'test-map-uri',
+      scale: 1,
+    });
+    storage.loadLocations.mockResolvedValue([
+      makeLocation({ id: 'loc-1', name: 'The Docks' }),
+    ]);
+    storage.updateLocation.mockResolvedValue(
+      makeLocation({
+        id: 'loc-1',
+        name: 'The Docks',
+        mapCoordinates: { x: 0.5, y: 0.5 },
+      })
+    );
+
+    const { findByText } = render(<LocationMapScreen />);
+
+    // Let the initial `loadLocations()` from `useFocusEffect` resolve before
+    // long-pressing, so the picker has the location to list.
+    const loadCallsBeforePlacement = () =>
+      storage.loadLocations.mock.calls.length;
+    await waitFor(() => expect(loadCallsBeforePlacement()).toBeGreaterThan(0));
+    const callsBeforePlacement = loadCallsBeforePlacement();
+
+    const longPressStub = getLatestLongPressStub();
+    act(() => {
+      longPressStub.callbacks.onStart({ x: 0, y: 0 });
+    });
+
+    fireEvent.press(await findByText('The Docks'));
+
+    await waitFor(() => {
+      expect(storage.updateLocation).toHaveBeenCalledWith('loc-1', {
+        mapCoordinates: { x: 0.5, y: 0.5 },
+      });
+    });
+    // Placement reloads the location list so the new marker appears.
+    await waitFor(() => {
+      expect(loadCallsBeforePlacement()).toBeGreaterThan(callsBeforePlacement);
+    });
   });
 });

@@ -35,7 +35,6 @@ type FactionFormRouteProp = RouteProp<RootStackParamList, 'FactionForm'>;
 interface FactionFormData {
   name: string;
   description: string;
-  imageUri?: string;
   imageUris?: string[];
   relationships?: FactionRelationship[];
   retired?: boolean;
@@ -49,7 +48,6 @@ export const FactionFormScreen: React.FC = () => {
   const [formData, setFormData] = useState<FactionFormData>({
     name: '',
     description: '',
-    imageUri: undefined,
     imageUris: [],
     relationships: [],
     retired: false,
@@ -81,9 +79,7 @@ export const FactionFormScreen: React.FC = () => {
           setFormData({
             name: faction.name,
             description: faction.description,
-            imageUri: faction.imageUri,
-            imageUris:
-              faction.imageUris || (faction.imageUri ? [faction.imageUri] : []),
+            imageUris: faction.imageUris || [],
             relationships: faction.relationships || [],
             retired: faction.retired ?? false,
           });
@@ -126,7 +122,6 @@ export const FactionFormScreen: React.FC = () => {
       setFormData({
         ...formData,
         imageUris: [...currentImages, newImageUri],
-        imageUri: currentImages.length === 0 ? newImageUri : formData.imageUri,
       });
     }
   };
@@ -137,7 +132,6 @@ export const FactionFormScreen: React.FC = () => {
     setFormData({
       ...formData,
       imageUris: newImages,
-      imageUri: newImages.length > 0 ? newImages[0] : undefined,
     });
   };
 
@@ -248,7 +242,6 @@ export const FactionFormScreen: React.FC = () => {
         const updated = await updateFaction(factionName, {
           name: formData.name.trim(),
           description: formData.description.trim(),
-          imageUri: formData.imageUri,
           imageUris: formData.imageUris,
           relationships: formData.relationships || [],
           retired: formData.retired,
@@ -273,7 +266,6 @@ export const FactionFormScreen: React.FC = () => {
         const success = await createFaction({
           name: formData.name.trim(),
           description: formData.description.trim(),
-          imageUri: formData.imageUri,
           imageUris: formData.imageUris,
           relationships: formData.relationships || [],
           retired: formData.retired,

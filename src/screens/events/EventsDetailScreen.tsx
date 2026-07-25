@@ -132,14 +132,9 @@ export const EventsDetailScreen: React.FC = () => {
       }}
     >
       {/* Event Images */}
-      {((event.imageUris && event.imageUris.length > 0) || event.imageUri) && (
+      {event.imageUris && event.imageUris.length > 0 && (
         <View style={styles.imageGallery}>
-          {(event.imageUris && event.imageUris.length > 0
-            ? event.imageUris
-            : event.imageUri
-              ? [event.imageUri]
-              : []
-          ).map((uri, index) => (
+          {event.imageUris.map((uri, index) => (
             <View key={index} style={styles.imageContainer}>
               <Image source={{ uri }} style={styles.eventImage} />
             </View>

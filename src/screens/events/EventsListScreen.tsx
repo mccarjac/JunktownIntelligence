@@ -181,9 +181,9 @@ export const EventsTimelineScreen: React.FC = () => {
             {formatEventDateShort(item.date, item.time)}
           </Text>
         </View>
-        {item.imageUri && (
+        {item.imageUris && item.imageUris.length > 0 && (
           <Image
-            source={{ uri: item.imageUri }}
+            source={{ uri: item.imageUris[0] }}
             style={styles.eventThumbnail}
           />
         )}

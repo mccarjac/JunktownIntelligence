@@ -91,7 +91,7 @@ describe('exportImport JSON round trip', () => {
       );
     });
 
-    it('strips imageUri fields from characters before importing', async () => {
+    it('strips a legacy imageUri from characters before importing (without images)', async () => {
       mockPickedFile('backup.json');
       const dataset = {
         characters: [
@@ -120,7 +120,11 @@ describe('exportImport JSON round trip', () => {
       const saved = (
         SafeAsyncStorageJSONParser.setItem as jest.Mock
       ).mock.calls.find(c => c[0] === 'gameCharacterManager')?.[1];
+      // Plain-JSON import explicitly skips images, so the deprecated
+      // imageUri is dropped rather than backfilled into imageUris - there
+      // is no accompanying image asset to carry forward.
       expect(saved.characters[0].imageUri).toBeUndefined();
+      expect(saved.characters[0].imageUris).toBeUndefined();
     });
 
     it('returns false without touching storage when the user cancels the picker', async () => {
