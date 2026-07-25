@@ -10,3 +10,4 @@ export { Section } from './common/Section';
 export { CollapsibleSection } from './common/CollapsibleSection';
 export { Card } from './common/Card';
 export { InfoButton } from './common/InfoButton';
+export { SyncConflictModal } from './common/SyncConflictModal';

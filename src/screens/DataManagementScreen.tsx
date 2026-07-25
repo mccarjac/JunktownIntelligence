@@ -18,21 +18,37 @@ import {
   mergeCharacterData,
 } from '@utils/exportImport';
 import {
+  applyGitHubSyncPlan,
+  computeGitHubSyncPlan,
   exportToGitHub,
   importFromGitHub,
-  isGitHubConfigured,
   verifyGitHubToken,
   saveGitHubConfig,
   getGitHubConfig,
 } from '@utils/gitIntegration';
+import type { ConflictResolution, SyncPlan } from '@utils/syncMerge';
 import { clearDiscordData } from '@/utils/discordStorage';
 import { colors as themeColors } from '@/styles/theme';
 import { commonStyles } from '@/styles/commonStyles';
+import { SyncConflictModal } from '@components/common/SyncConflictModal';
+
+type ProgressOperation =
+  | 'export'
+  | 'import'
+  | 'merge'
+  | 'git-export'
+  | 'git-import'
+  | 'git-merge';
 
 interface ProgressState {
   visible: boolean;
   message: string;
-  operation: 'export' | 'import' | 'merge' | 'git-export' | 'git-import' | null;
+  operation: ProgressOperation | null;
+}
+
+interface PendingSyncPlan {
+  plan: SyncPlan;
+  remoteCommitSha: string;
 }
 
 export const DataManagementScreen: React.FC = () => {
@@ -42,23 +58,24 @@ export const DataManagementScreen: React.FC = () => {
     operation: null,
   });
   const [gitHubConfigured, setGitHubConfigured] = useState<boolean>(false);
+  const [lastSync, setLastSync] = useState<string | undefined>(undefined);
   const [tokenDialogVisible, setTokenDialogVisible] = useState<boolean>(false);
   const [tokenInput, setTokenInput] = useState<string>('');
   const [tokenValidating, setTokenValidating] = useState<boolean>(false);
+  const [pendingSyncPlan, setPendingSyncPlan] =
+    useState<PendingSyncPlan | null>(null);
 
   // Check GitHub configuration on mount
   React.useEffect(() => {
     const checkConfig = async () => {
-      const configured = await isGitHubConfigured();
-      setGitHubConfigured(configured);
+      const config = await getGitHubConfig();
+      setGitHubConfigured(!!config.token);
+      setLastSync(config.sync?.pulledAt || config.lastSync);
     };
     checkConfig();
   }, []);
 
-  const showProgress = (
-    operation: 'export' | 'import' | 'merge' | 'git-export' | 'git-import',
-    message: string
-  ) => {
+  const showProgress = (operation: ProgressOperation, message: string) => {
     setProgress({ visible: true, message, operation });
   };
 
@@ -191,7 +208,37 @@ export const DataManagementScreen: React.FC = () => {
     setTokenDialogVisible(false);
   };
 
-  const handleGitHubExport = async () => {
+  const applyResolvedSync = async (
+    plan: SyncPlan,
+    resolutions: Record<string, ConflictResolution>,
+    remoteCommitSha: string
+  ) => {
+    showProgress('git-merge', 'Applying merge...');
+    const applied = await applyGitHubSyncPlan(
+      plan,
+      resolutions,
+      remoteCommitSha
+    );
+    hideProgress();
+
+    if (applied.success) {
+      const config = await getGitHubConfig();
+      setLastSync(config.sync?.pulledAt || config.lastSync);
+      Alert.alert(
+        'Sync Successful',
+        'Your local data has been merged with the GitHub repository.',
+        [{ text: 'OK' }]
+      );
+    } else {
+      Alert.alert(
+        'Sync Failed',
+        applied.error || 'An unexpected error occurred',
+        [{ text: 'OK' }]
+      );
+    }
+  };
+
+  const handleGitHubMerge = async () => {
     if (!gitHubConfigured) {
       Alert.alert(
         'GitHub Not Configured',
@@ -204,9 +251,47 @@ export const DataManagementScreen: React.FC = () => {
       return;
     }
 
+    showProgress('git-merge', 'Syncing from GitHub...');
+    const result = await computeGitHubSyncPlan();
+    hideProgress();
+
+    if (!result.success || !result.plan || !result.remoteCommitSha) {
+      Alert.alert(
+        'Sync Failed',
+        result.error || 'An unexpected error occurred',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    if (result.plan.conflicts.length === 0) {
+      await applyResolvedSync(result.plan, {}, result.remoteCommitSha);
+      return;
+    }
+
+    setPendingSyncPlan({
+      plan: result.plan,
+      remoteCommitSha: result.remoteCommitSha,
+    });
+  };
+
+  const handleResolveConflicts = async (
+    resolutions: Record<string, ConflictResolution>
+  ) => {
+    if (!pendingSyncPlan) return;
+    const { plan, remoteCommitSha } = pendingSyncPlan;
+    setPendingSyncPlan(null);
+    await applyResolvedSync(plan, resolutions, remoteCommitSha);
+  };
+
+  const handleCancelConflicts = () => {
+    setPendingSyncPlan(null);
+  };
+
+  const runGitHubExport = async (force: boolean) => {
     showProgress('git-export', 'Exporting to GitHub...');
     try {
-      const result = await exportToGitHub();
+      const result = await exportToGitHub({ force });
       hideProgress();
 
       if (result.success && result.prUrl) {
@@ -214,6 +299,19 @@ export const DataManagementScreen: React.FC = () => {
           'Export Successful',
           `A pull request has been created with your data. You can review it at:\n\n${result.prUrl}`,
           [{ text: 'OK' }]
+        );
+      } else if (result.remoteMoved) {
+        Alert.alert(
+          'Repository Has Changed',
+          result.error || 'The repository has changed since your last sync.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Sync First', onPress: () => handleGitHubMerge() },
+            {
+              text: 'Export Anyway',
+              onPress: () => runGitHubExport(true),
+            },
+          ]
         );
       } else {
         Alert.alert(
@@ -232,7 +330,7 @@ export const DataManagementScreen: React.FC = () => {
     }
   };
 
-  const handleGitHubImport = async () => {
+  const handleGitHubExport = async () => {
     if (!gitHubConfigured) {
       Alert.alert(
         'GitHub Not Configured',
@@ -245,6 +343,10 @@ export const DataManagementScreen: React.FC = () => {
       return;
     }
 
+    await runGitHubExport(false);
+  };
+
+  const performGitHubImport = async () => {
     showProgress('git-import', 'Importing from GitHub...');
     try {
       const result = await importFromGitHub();
@@ -283,6 +385,33 @@ export const DataManagementScreen: React.FC = () => {
         [{ text: 'OK' }]
       );
     }
+  };
+
+  const handleGitHubImport = () => {
+    if (!gitHubConfigured) {
+      Alert.alert(
+        'GitHub Not Configured',
+        'Please set up your GitHub token first.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Set Up', onPress: handleGitHubSetup },
+        ]
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Replace Local Data?',
+      'This overwrites your local characters, factions, events, and quests with the version from GitHub. Any local edits not yet exported will be lost. Use "Sync from GitHub (Merge)" instead to keep your local changes.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Replace',
+          style: 'destructive',
+          onPress: () => performGitHubImport(),
+        },
+      ]
+    );
   };
 
   return (
@@ -334,6 +463,13 @@ export const DataManagementScreen: React.FC = () => {
             Share data with other users through the AWInvestigationsDataLibrary
             GitHub repository. Exports create pull requests for review.
           </Text>
+          {gitHubConfigured && (
+            <Text style={styles.syncStatusText}>
+              {lastSync
+                ? `Last synced: ${new Date(lastSync).toLocaleString()}`
+                : 'Never synced'}
+            </Text>
+          )}
 
           {!gitHubConfigured && (
             <TouchableOpacity
@@ -347,6 +483,13 @@ export const DataManagementScreen: React.FC = () => {
           {gitHubConfigured && (
             <>
               <TouchableOpacity
+                style={[styles.actionButton, styles.gitMergeButton]}
+                onPress={handleGitHubMerge}
+              >
+                <Text style={styles.buttonText}>Sync from GitHub (Merge)</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
                 style={[styles.actionButton, styles.gitExportButton]}
                 onPress={handleGitHubExport}
               >
@@ -359,7 +502,9 @@ export const DataManagementScreen: React.FC = () => {
                 style={[styles.actionButton, styles.gitImportButton]}
                 onPress={handleGitHubImport}
               >
-                <Text style={styles.buttonText}>Import from GitHub</Text>
+                <Text style={styles.buttonText}>
+                  Import from GitHub (Replace)
+                </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -466,6 +611,13 @@ export const DataManagementScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
+
+      <SyncConflictModal
+        visible={!!pendingSyncPlan}
+        conflicts={pendingSyncPlan?.plan.conflicts || []}
+        onResolve={handleResolveConflicts}
+        onCancel={handleCancelConflicts}
+      />
     </View>
   );
 };
@@ -492,6 +644,11 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     lineHeight: 20,
   },
+  syncStatusText: {
+    ...commonStyles.text.body,
+    color: themeColors.text.muted,
+    marginBottom: 12,
+  },
   actionButton: commonStyles.button.base,
   exportButton: {
     ...commonStyles.button.warning,
@@ -505,6 +662,10 @@ const styles = StyleSheet.create({
   setupButton: {
     backgroundColor: themeColors.elevated,
     borderColor: themeColors.accent.secondary,
+    marginBottom: 12,
+  },
+  gitMergeButton: {
+    backgroundColor: themeColors.accent.primary,
     marginBottom: 12,
   },
   gitExportButton: {
