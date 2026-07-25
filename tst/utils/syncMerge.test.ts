@@ -111,9 +111,12 @@ describe('computeSyncPlan', () => {
     });
 
     it('ignores image field differences (file:// vs repo-relative paths)', () => {
-      const base = makeCharacter({ name: 'Alice', imageUri: 'images/a_0.jpg' });
-      const local = { ...base, imageUri: 'file:///local/a_0.jpg' };
-      const remote = { ...base, imageUri: 'images/a_0.jpg' };
+      const base = makeCharacter({
+        name: 'Alice',
+        imageUris: ['images/a_0.jpg'],
+      });
+      const local = { ...base, imageUris: ['file:///local/a_0.jpg'] };
+      const remote = { ...base, imageUris: ['images/a_0.jpg'] };
 
       const plan = computeSyncPlan(
         { ...emptyDataset(), characters: [base] },
