@@ -41,6 +41,7 @@ import { QuestFormScreen } from './src/screens/quest/QuestFormScreen';
 import { QuestDetailScreen } from './src/screens/quest/QuestDetailScreen';
 import { QuestProposalScreen } from './src/screens/quest/QuestProposalScreen';
 import { InfluenceReportScreen } from './src/screens/InfluenceReportScreen';
+import { RelationshipGraphScreen } from './src/screens/RelationshipGraphScreen';
 import { DiscordConfigScreen } from './src/screens/discord/DiscordConfigScreen';
 import { DiscordServerListScreen } from './src/screens/discord/DiscordServerListScreen';
 import { DiscordServerFormScreen } from './src/screens/discord/DiscordServerFormScreen';
@@ -138,6 +139,15 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
         label="Influence Report"
         onPress={() => navigation.navigate('InfluenceReport')}
         focused={isActive('InfluenceReport')}
+        activeTintColor="#6C5CE7"
+        inactiveTintColor="#B8B8CC"
+        activeBackgroundColor="rgba(108, 92, 231, 0.1)"
+        labelStyle={drawerStyles.drawerLabel}
+      />
+      <DrawerItem
+        label="Relationship Graph"
+        onPress={() => navigation.navigate('RelationshipGraph')}
+        focused={isActive('RelationshipGraph')}
         activeTintColor="#6C5CE7"
         inactiveTintColor="#B8B8CC"
         activeBackgroundColor="rgba(108, 92, 231, 0.1)"
@@ -326,6 +336,14 @@ function MainDrawer() {
         options={{
           title: 'Influence Report',
           drawerLabel: 'Influence Report',
+        }}
+      />
+      <Drawer.Screen
+        name="RelationshipGraph"
+        component={RelationshipGraphScreen}
+        options={{
+          title: 'Relationship Graph',
+          drawerLabel: 'Relationship Graph',
         }}
       />
       <Drawer.Screen

@@ -108,6 +108,17 @@ Path aliases (tsconfig + babel-plugin-module-resolver): `@/*` → `src/*`, plus
 - **Screens:** list/form/detail screens are built on the generics in
   `src/components/screens/`. Follow the existing feature folders rather than
   hand-rolling new layouts, and keep the dark theme from `styles/theme.ts`.
+- **Relationship graph:** the node/edge model for the "Relationship Graph"
+  screen lives in `src/utils/relationshipGraph.ts` (pure, no storage/theme
+  deps). Node ids are namespaced (`character:<id>` / `faction:<name>` /
+  `location:<id>`) because factions are name-keyed (`StoredFaction` has no
+  `id`) while characters and locations are id-keyed. Faction nodes must be
+  the union of `loadFactions()` and faction names embedded on characters —
+  mirror `FactionListScreen`'s pattern — since `migrateFactionDescriptions()`
+  only backfills factions that had a non-empty embedded description. This
+  screen is the first direct `react-native-svg` consumer in `src/`; it
+  renders under Jest without any mock (`Circle`/`G` support `onPress` and
+  `accessibilityLabel` directly).
 
 ## Testing
 
