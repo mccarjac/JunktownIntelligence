@@ -66,7 +66,18 @@ Path aliases (tsconfig + babel-plugin-module-resolver): `@/*` → `src/*`, plus
   `runExclusive` under the relevant key.** If an operation touches two keys
   (e.g. deleting a faction also edits characters), wrap each key's section
   separately — never nest `runExclusive` calls for the _same_ key (it
-  deadlocks).
+  deadlocks). `characterStorage.applyMergedDataset` is the multi-key example:
+  it sequences `runExclusive` across all five keys, one at a time.
+- **GitHub sync conflict handling:** `src/utils/gitIntegration.ts` persists a
+  three-way merge base (the dataset as it stood at the end of the last
+  successful merge sync, plus the remote's commit SHA) alongside the existing
+  `@github_config` file, so a later sync can tell "you changed this" apart
+  from "they changed this" instead of only seeing current states. The actual
+  merge decision logic is I/O-free and lives in `src/utils/syncMerge.ts`
+  (`computeSyncPlan`/`applyResolutions`) — keep new merge/conflict logic
+  there rather than growing it inside `gitIntegration.ts`. Network/offline
+  failures are classified by `src/utils/syncErrors.ts`
+  (`classifySyncError`) rather than surfaced as raw fetch error text.
 
 ## Conventions & gotchas
 
@@ -165,14 +176,22 @@ blast-radius / lowest-effort first):
    `.zip` branches of import/merge — all need `react-native-zip-archive` +
    directory-walking (`makeDirectoryAsync`/`copyAsync`/`getInfoAsync`/
    `readDirectoryAsync`) + `expo-sharing` mocked.
-2. **`src/utils/gitIntegration.ts`** (~900 lines, untested) — GitHub-backed
-   sync; highest blast radius, needs `@octokit` mocking.
-3. **`src/utils/discordApi.ts`** and **`src/utils/discordCharacterExtraction.ts`**
+2. **`src/utils/discordApi.ts`** and **`src/utils/discordCharacterExtraction.ts`**
    (untested) — parsing/ingesting external Discord data; boundary-parsing
    bugs are likely here.
 
 Done since the list above was last written:
 
+- ~~`src/utils/gitIntegration.ts`~~ (GitHub-backed sync, was the highest
+  blast-radius gap) — covered by `tst/utils/gitIntegration.test.ts`, using a
+  hand-rolled Octokit test double (`tst/helpers/octokit.ts`) since the module
+  has no dependency-injection seam (`new Octokit({ auth })` internally); any
+  test touching it needs `jest.mock('@octokit/rest', () => ({ Octokit:
+jest.fn() }))` rather than a bare automock, or Jest tries to load the real
+  package and fails on its ESM `universal-user-agent` dependency. Conflict
+  detection and merging now live in `src/utils/syncMerge.ts` (pure, no I/O —
+  see `tst/utils/syncMerge.test.ts`) and error classification in
+  `src/utils/syncErrors.ts` (`tst/utils/syncErrors.test.ts`).
 - ~~`src/components/screens/BaseDetailScreen.tsx`/`BaseFormScreen.tsx`~~ and
   every templated character/faction/location/events/quest detail/form/list
   screen — contract-based tests via `tst/helpers/screenContracts.ts`
