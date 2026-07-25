@@ -1313,29 +1313,38 @@ export const createEvent = async (
 
 export const addEvent = async (
   event: Omit<GameEvent, 'id' | 'createdAt' | 'updatedAt'>
-): Promise<GameEvent> =>
-  runExclusive(EVENT_STORAGE_KEY, async () => {
+): Promise<GameEvent> => {
+  const newEvent = await runExclusive(EVENT_STORAGE_KEY, async () => {
     const events = await loadEvents();
-    const newEvent: GameEvent = {
+    const created: GameEvent = {
       ...event,
       id: uuidv4(),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
-    await saveEvents([...events, newEvent]);
-    return newEvent;
+    await saveEvents([...events, created]);
+    return created;
   });
+
+  if (newEvent.questIds && newEvent.questIds.length > 0) {
+    await syncQuestBackrefsForEvent(newEvent.id, newEvent.questIds, []);
+  }
+
+  return newEvent;
+};
 
 export const updateEvent = async (
   id: string,
   updates: Partial<GameEvent>
-): Promise<GameEvent | null> =>
-  runExclusive(EVENT_STORAGE_KEY, async () => {
+): Promise<GameEvent | null> => {
+  const result = await runExclusive(EVENT_STORAGE_KEY, async () => {
     const events = await loadEvents();
     const index = events.findIndex(e => e.id === id);
 
     if (index === -1) return null;
+
+    const previousQuestIds = events[index].questIds || [];
 
     const updatedEvent: GameEvent = {
       ...events[index],
@@ -1345,11 +1354,27 @@ export const updateEvent = async (
 
     events[index] = updatedEvent;
     await saveEvents(events);
-    return updatedEvent;
+    return { updatedEvent, previousQuestIds };
   });
 
-export const deleteEvent = async (id: string): Promise<boolean> =>
-  runExclusive(EVENT_STORAGE_KEY, async () => {
+  if (!result) return null;
+
+  const { updatedEvent, previousQuestIds } = result;
+
+  if (updates.questIds !== undefined) {
+    const nextQuestIds = updatedEvent.questIds || [];
+    const added = nextQuestIds.filter(qid => !previousQuestIds.includes(qid));
+    const removed = previousQuestIds.filter(qid => !nextQuestIds.includes(qid));
+    if (added.length > 0 || removed.length > 0) {
+      await syncQuestBackrefsForEvent(id, added, removed);
+    }
+  }
+
+  return updatedEvent;
+};
+
+export const deleteEvent = async (id: string): Promise<boolean> => {
+  const deleted = await runExclusive(EVENT_STORAGE_KEY, async () => {
     const events = await loadEvents();
     const filtered = events.filter(e => e.id !== id);
 
@@ -1358,6 +1383,13 @@ export const deleteEvent = async (id: string): Promise<boolean> =>
     await saveEvents(filtered);
     return true;
   });
+
+  if (deleted) {
+    await removeEventFromAllQuests(id);
+  }
+
+  return deleted;
+};
 
 // ============================================
 // Quest Storage Functions
@@ -1388,29 +1420,38 @@ export const createQuest = async (
 
 export const addQuest = async (
   quest: Omit<GameQuest, 'id' | 'createdAt' | 'updatedAt'>
-): Promise<GameQuest> =>
-  runExclusive(QUEST_STORAGE_KEY, async () => {
+): Promise<GameQuest> => {
+  const newQuest = await runExclusive(QUEST_STORAGE_KEY, async () => {
     const quests = await loadQuests();
-    const newQuest: GameQuest = {
+    const created: GameQuest = {
       ...quest,
       id: uuidv4(),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
-    await saveQuests([...quests, newQuest]);
-    return newQuest;
+    await saveQuests([...quests, created]);
+    return created;
   });
+
+  if (newQuest.eventIds && newQuest.eventIds.length > 0) {
+    await syncEventBackrefsForQuest(newQuest.id, newQuest.eventIds, []);
+  }
+
+  return newQuest;
+};
 
 export const updateQuest = async (
   id: string,
   updates: Partial<GameQuest>
-): Promise<GameQuest | null> =>
-  runExclusive(QUEST_STORAGE_KEY, async () => {
+): Promise<GameQuest | null> => {
+  const result = await runExclusive(QUEST_STORAGE_KEY, async () => {
     const quests = await loadQuests();
     const index = quests.findIndex(q => q.id === id);
 
     if (index === -1) return null;
+
+    const previousEventIds = quests[index].eventIds || [];
 
     const updatedQuest: GameQuest = {
       ...quests[index],
@@ -1420,11 +1461,27 @@ export const updateQuest = async (
 
     quests[index] = updatedQuest;
     await saveQuests(quests);
-    return updatedQuest;
+    return { updatedQuest, previousEventIds };
   });
 
-export const deleteQuest = async (id: string): Promise<boolean> =>
-  runExclusive(QUEST_STORAGE_KEY, async () => {
+  if (!result) return null;
+
+  const { updatedQuest, previousEventIds } = result;
+
+  if (updates.eventIds !== undefined) {
+    const nextEventIds = updatedQuest.eventIds || [];
+    const added = nextEventIds.filter(eid => !previousEventIds.includes(eid));
+    const removed = previousEventIds.filter(eid => !nextEventIds.includes(eid));
+    if (added.length > 0 || removed.length > 0) {
+      await syncEventBackrefsForQuest(id, added, removed);
+    }
+  }
+
+  return updatedQuest;
+};
+
+export const deleteQuest = async (id: string): Promise<boolean> => {
+  const deleted = await runExclusive(QUEST_STORAGE_KEY, async () => {
     const quests = await loadQuests();
     const filtered = quests.filter(q => q.id !== id);
 
@@ -1433,3 +1490,213 @@ export const deleteQuest = async (id: string): Promise<boolean> =>
     await saveQuests(filtered);
     return true;
   });
+
+  if (deleted) {
+    await removeQuestFromAllEvents(id);
+  }
+
+  return deleted;
+};
+
+// ============================================
+// Quest <-> Event bidirectional link sync
+// ============================================
+//
+// GameQuest.eventIds and GameEvent.questIds are kept as mirrored
+// back-references (same pattern as the bidirectional faction relationships
+// above). Each side is its own storage key, so a sync always locks
+// EVENT_STORAGE_KEY and QUEST_STORAGE_KEY sequentially -- never nested --
+// to avoid deadlocking runExclusive on the same key twice.
+
+/** Adds/removes `questId` on the named events' `questIds`. No-ops (and skips
+ * the write entirely) when there is nothing to change. */
+const syncEventBackrefsForQuest = async (
+  questId: string,
+  addToEventIds: string[],
+  removeFromEventIds: string[]
+): Promise<void> => {
+  if (addToEventIds.length === 0 && removeFromEventIds.length === 0) return;
+
+  await runExclusive(EVENT_STORAGE_KEY, async () => {
+    const events = await loadEvents();
+    const now = new Date().toISOString();
+    let changed = false;
+
+    const updated = events.map(event => {
+      const currentQuestIds = event.questIds || [];
+      const shouldAdd =
+        addToEventIds.includes(event.id) && !currentQuestIds.includes(questId);
+      const shouldRemove =
+        removeFromEventIds.includes(event.id) &&
+        currentQuestIds.includes(questId);
+
+      if (!shouldAdd && !shouldRemove) return event;
+
+      changed = true;
+      const questIds = shouldAdd
+        ? [...currentQuestIds, questId]
+        : currentQuestIds.filter(id => id !== questId);
+
+      return { ...event, questIds, updatedAt: now };
+    });
+
+    if (changed) await saveEvents(updated);
+  });
+};
+
+/** Adds/removes `eventId` on the named quests' `eventIds`. Mirror of
+ * `syncEventBackrefsForQuest`. */
+const syncQuestBackrefsForEvent = async (
+  eventId: string,
+  addToQuestIds: string[],
+  removeFromQuestIds: string[]
+): Promise<void> => {
+  if (addToQuestIds.length === 0 && removeFromQuestIds.length === 0) return;
+
+  await runExclusive(QUEST_STORAGE_KEY, async () => {
+    const quests = await loadQuests();
+    const now = new Date().toISOString();
+    let changed = false;
+
+    const updated = quests.map(quest => {
+      const currentEventIds = quest.eventIds || [];
+      const shouldAdd =
+        addToQuestIds.includes(quest.id) && !currentEventIds.includes(eventId);
+      const shouldRemove =
+        removeFromQuestIds.includes(quest.id) &&
+        currentEventIds.includes(eventId);
+
+      if (!shouldAdd && !shouldRemove) return quest;
+
+      changed = true;
+      const eventIds = shouldAdd
+        ? [...currentEventIds, eventId]
+        : currentEventIds.filter(id => id !== eventId);
+
+      return { ...quest, eventIds, updatedAt: now };
+    });
+
+    if (changed) await saveQuests(updated);
+  });
+};
+
+/** Removes `questId` from every event's `questIds`, regardless of what the
+ * quest's own `eventIds` currently records. Used on quest delete so stale
+ * back-references can't survive drift. */
+const removeQuestFromAllEvents = async (questId: string): Promise<void> => {
+  await runExclusive(EVENT_STORAGE_KEY, async () => {
+    const events = await loadEvents();
+    const now = new Date().toISOString();
+    let changed = false;
+
+    const updated = events.map(event => {
+      if (!event.questIds?.includes(questId)) return event;
+      changed = true;
+      return {
+        ...event,
+        questIds: event.questIds.filter(id => id !== questId),
+        updatedAt: now,
+      };
+    });
+
+    if (changed) await saveEvents(updated);
+  });
+};
+
+/** Removes `eventId` from every quest's `eventIds`. Mirror of
+ * `removeQuestFromAllEvents`. */
+const removeEventFromAllQuests = async (eventId: string): Promise<void> => {
+  await runExclusive(QUEST_STORAGE_KEY, async () => {
+    const quests = await loadQuests();
+    const now = new Date().toISOString();
+    let changed = false;
+
+    const updated = quests.map(quest => {
+      if (!quest.eventIds?.includes(eventId)) return quest;
+      changed = true;
+      return {
+        ...quest,
+        eventIds: quest.eventIds.filter(id => id !== eventId),
+        updatedAt: now,
+      };
+    });
+
+    if (changed) await saveQuests(updated);
+  });
+};
+
+/**
+ * Backfills and prunes the quest<->event back-references so existing data
+ * (e.g. quests with `eventIds` from before `GameEvent.questIds` existed)
+ * ends up consistent on both sides. Safe to call repeatedly; a side is only
+ * written when it actually changes. Mirrors `migrateFactionDescriptions`.
+ */
+export const reconcileQuestEventLinks = async (): Promise<void> => {
+  const [quests, events] = await Promise.all([loadQuests(), loadEvents()]);
+
+  const eventIdSet = new Set(events.map(e => e.id));
+  const questIdSet = new Set(quests.map(q => q.id));
+
+  // Union of both directions: a link recorded on either side counts.
+  const eventIdsByQuest = new Map<string, Set<string>>();
+  const questIdsByEvent = new Map<string, Set<string>>();
+
+  quests.forEach(quest => {
+    const validEventIds = (quest.eventIds || []).filter(id =>
+      eventIdSet.has(id)
+    );
+    eventIdsByQuest.set(quest.id, new Set(validEventIds));
+  });
+  events.forEach(event => {
+    const validQuestIds = (event.questIds || []).filter(id =>
+      questIdSet.has(id)
+    );
+    questIdsByEvent.set(event.id, new Set(validQuestIds));
+
+    validQuestIds.forEach(questId => {
+      eventIdsByQuest.get(questId)?.add(event.id);
+    });
+  });
+  quests.forEach(quest => {
+    (eventIdsByQuest.get(quest.id) || new Set()).forEach(eventId => {
+      questIdsByEvent.get(eventId)?.add(quest.id);
+    });
+  });
+
+  const now = new Date().toISOString();
+
+  let questsChanged = false;
+  const reconciledQuests = quests.map(quest => {
+    const reconciled = Array.from(eventIdsByQuest.get(quest.id) || []);
+    const original = quest.eventIds || [];
+    if (
+      reconciled.length === original.length &&
+      reconciled.every(id => original.includes(id))
+    ) {
+      return quest;
+    }
+    questsChanged = true;
+    return { ...quest, eventIds: reconciled, updatedAt: now };
+  });
+
+  let eventsChanged = false;
+  const reconciledEvents = events.map(event => {
+    const reconciled = Array.from(questIdsByEvent.get(event.id) || []);
+    const original = event.questIds || [];
+    if (
+      reconciled.length === original.length &&
+      reconciled.every(id => original.includes(id))
+    ) {
+      return event;
+    }
+    eventsChanged = true;
+    return { ...event, questIds: reconciled, updatedAt: now };
+  });
+
+  if (questsChanged) {
+    await runExclusive(QUEST_STORAGE_KEY, () => saveQuests(reconciledQuests));
+  }
+  if (eventsChanged) {
+    await runExclusive(EVENT_STORAGE_KEY, () => saveEvents(reconciledEvents));
+  }
+};

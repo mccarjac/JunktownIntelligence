@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Alert } from 'react-native';
+import { View, Text, StyleSheet, Alert, TouchableOpacity } from 'react-native';
 import {
   useNavigation,
   useRoute,
@@ -15,11 +15,21 @@ import {
   loadEvents,
   deleteQuest,
 } from '@utils/characterStorage';
-import { GameQuest, QuestStatus } from '@models/types';
+import {
+  GameQuest,
+  GameEvent,
+  GameCharacter,
+  QuestStatus,
+} from '@models/types';
 import { colors as themeColors } from '@/styles/theme';
 import { commonStyles } from '@/styles/commonStyles';
 import { BaseDetailScreen, Section, CollapsibleSection } from '@/components';
-import { formatEventDate } from '@utils/dateUtils';
+import { formatEventDate, formatEventDateShort } from '@utils/dateUtils';
+import {
+  buildQuestTimeline,
+  buildQuestParticipants,
+  QuestParticipant,
+} from '@utils/questNarrative';
 
 type QuestsDetailNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -44,10 +54,16 @@ const STATUS_COLORS: Record<QuestStatus, string> = {
   [QuestStatus.Failure]: themeColors.accent.danger,
 };
 
+interface QuestTimelineItem {
+  event: GameEvent;
+  locationName?: string;
+  dateLabel: string;
+}
+
 interface QuestWithDetails extends GameQuest {
   locationName?: string;
-  characterNames: string[];
-  eventTitles: string[];
+  timeline: QuestTimelineItem[];
+  participants: QuestParticipant[];
 }
 
 export const QuestDetailScreen: React.FC = () => {
@@ -56,9 +72,10 @@ export const QuestDetailScreen: React.FC = () => {
   const { questId } = route.params;
 
   const [quest, setQuest] = useState<QuestWithDetails | null>(null);
+  const [characters, setCharacters] = useState<GameCharacter[]>([]);
 
   const loadQuestDetails = useCallback(async () => {
-    const [quests, characters, locations, events] = await Promise.all([
+    const [quests, charactersData, locations, events] = await Promise.all([
       loadQuests(),
       loadCharacters(),
       loadLocations(),
@@ -74,22 +91,39 @@ export const QuestDetailScreen: React.FC = () => {
     }
 
     const locationMap = new Map(locations.map(l => [l.id, l.name]));
-    const characterMap = new Map(characters.map(c => [c.id, c.name]));
-    const eventMap = new Map(events.map(e => [e.id, e.title]));
+
+    const timeline: QuestTimelineItem[] = buildQuestTimeline(
+      foundQuest,
+      events
+    ).map(event => {
+      let dateLabel = 'Undated';
+      if (event.date) {
+        try {
+          dateLabel = formatEventDateShort(event.date, event.time);
+        } catch {
+          dateLabel = 'Undated';
+        }
+      }
+
+      return {
+        event,
+        locationName: event.locationId
+          ? locationMap.get(event.locationId)
+          : undefined,
+        dateLabel,
+      };
+    });
 
     const questWithDetails: QuestWithDetails = {
       ...foundQuest,
       locationName: foundQuest.locationId
         ? locationMap.get(foundQuest.locationId)
         : undefined,
-      characterNames:
-        foundQuest.assignedCharacterIds?.map(
-          id => characterMap.get(id) || 'Unknown'
-        ) || [],
-      eventTitles:
-        foundQuest.eventIds?.map(id => eventMap.get(id) || 'Unknown') || [],
+      timeline,
+      participants: buildQuestParticipants(foundQuest, events, charactersData),
     };
 
+    setCharacters(charactersData);
     setQuest(questWithDetails);
   }, [questId, navigation]);
 
@@ -181,17 +215,36 @@ export const QuestDetailScreen: React.FC = () => {
         )}
       </Section>
 
-      {/* Assigned Team */}
-      <CollapsibleSection
-        title={`Assigned Team (${quest.characterNames.length})`}
-      >
-        {quest.characterNames.length > 0 ? (
-          <View style={styles.chipList}>
-            {quest.characterNames.map((name, index) => (
-              <View key={index} style={styles.chip}>
-                <Text style={styles.chipText}>{name}</Text>
-              </View>
-            ))}
+      {/* Participants */}
+      <CollapsibleSection title={`Participants (${quest.participants.length})`}>
+        {quest.participants.length > 0 ? (
+          <View style={styles.participantsList}>
+            {quest.participants.map(participant => {
+              const character = characters.find(
+                c => c.id === participant.characterId
+              );
+              const roleLabel =
+                participant.assigned && participant.eventCount > 0
+                  ? 'Assigned · In events'
+                  : participant.assigned
+                    ? 'Assigned'
+                    : 'In events';
+
+              return (
+                <TouchableOpacity
+                  key={participant.characterId}
+                  style={styles.participantRow}
+                  disabled={!character}
+                  onPress={() =>
+                    character &&
+                    navigation.navigate('CharacterDetail', { character })
+                  }
+                >
+                  <Text style={styles.participantName}>{participant.name}</Text>
+                  <Text style={styles.participantMeta}>{roleLabel}</Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         ) : (
           <Text style={styles.emptyText}>No characters assigned yet</Text>
@@ -311,17 +364,29 @@ export const QuestDetailScreen: React.FC = () => {
         </CollapsibleSection>
       )}
 
-      {/* Related Events */}
-      {quest.eventTitles.length > 0 && (
+      {/* Quest Timeline */}
+      {quest.timeline.length > 0 && (
         <CollapsibleSection
-          title={`Related Events (${quest.eventTitles.length})`}
+          title={`Quest Timeline (${quest.timeline.length})`}
           defaultCollapsed
         >
-          <View style={styles.chipList}>
-            {quest.eventTitles.map((title, index) => (
-              <View key={index} style={styles.chip}>
-                <Text style={styles.chipText}>{title}</Text>
-              </View>
+          <View style={styles.timelineList}>
+            {quest.timeline.map(item => (
+              <TouchableOpacity
+                key={item.event.id}
+                style={styles.timelineRow}
+                onPress={() =>
+                  navigation.navigate('EventsDetail', {
+                    eventId: item.event.id,
+                  })
+                }
+              >
+                <Text style={styles.timelineDate}>{item.dateLabel}</Text>
+                <Text style={styles.timelineTitle}>{item.event.title}</Text>
+                {item.locationName && (
+                  <Text style={styles.timelineMeta}>{item.locationName}</Text>
+                )}
+              </TouchableOpacity>
             ))}
           </View>
         </CollapsibleSection>
@@ -442,4 +507,43 @@ const styles = StyleSheet.create({
     borderColor: themeColors.accent.success,
   },
   materialProgressText: commonStyles.badge.text,
+  participantsList: {
+    gap: 8,
+  },
+  participantRow: {
+    ...commonStyles.card.base,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  participantName: {
+    ...commonStyles.text.body,
+    fontWeight: '600',
+  },
+  participantMeta: {
+    ...commonStyles.text.caption,
+    color: themeColors.text.muted,
+  },
+  timelineList: {
+    gap: 8,
+  },
+  timelineRow: {
+    ...commonStyles.card.base,
+    paddingVertical: 12,
+  },
+  timelineDate: {
+    ...commonStyles.text.caption,
+    color: themeColors.text.muted,
+    marginBottom: 4,
+  },
+  timelineTitle: {
+    ...commonStyles.text.body,
+    fontWeight: '600',
+  },
+  timelineMeta: {
+    ...commonStyles.text.caption,
+    color: themeColors.text.muted,
+    marginTop: 2,
+  },
 });

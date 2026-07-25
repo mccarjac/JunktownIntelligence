@@ -90,6 +90,21 @@ Path aliases (tsconfig + babel-plugin-module-resolver): `@/*` → `src/*`, plus
   sync, and renaming a faction must update its references on characters and on
   other factions' relationships. See `updateFaction` / `createFaction` in
   `characterStorage.ts` for the pattern.
+- **Quest ↔ event links:** `GameQuest.eventIds` and `GameEvent.questIds` are
+  mirrored back-references, kept in sync by `addQuest`/`updateQuest`/
+  `deleteQuest`/`addEvent`/`updateEvent`/`deleteEvent` in `characterStorage.ts`
+  (see the "Quest <-> Event bidirectional link sync" section). Each side is a
+  separate storage key, so a sync locks `EVENT_STORAGE_KEY` and
+  `QUEST_STORAGE_KEY` **sequentially, never nested** — nesting a
+  `runExclusive` call for a key inside a `runExclusive` call for the _other_
+  key is fine (they're different keys), but never call `runExclusive` for the
+  same key you're already inside, or it deadlocks. A partial update that omits
+  `eventIds`/`questIds` must leave existing links alone, not clear them —
+  mutators must gate the sync on `updates.eventIds !== undefined` /
+  `updates.questIds !== undefined`. `reconcileQuestEventLinks()` backfills and
+  prunes both sides for data written before the back-reference existed; call
+  it (idempotently) from a list screen's load path, same as
+  `migrateFactionDescriptions`.
 - **Screens:** list/form/detail screens are built on the generics in
   `src/components/screens/`. Follow the existing feature folders rather than
   hand-rolling new layouts, and keep the dark theme from `styles/theme.ts`.
