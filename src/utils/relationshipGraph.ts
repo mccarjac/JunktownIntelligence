@@ -289,13 +289,23 @@ export interface PositionedNode extends GraphNode {
   y: number;
 }
 
+export interface GraphLayout {
+  nodes: PositionedNode[];
+  /**
+   * Natural size of the laid-out content: the node bounding box plus
+   * `padding` on every side (never smaller than the reference frame's
+   * padded minimum). The canvas should be rendered at this size.
+   */
+  size: Size;
+}
+
 export interface LayoutOptions {
   /**
    * d3-force tick count. Default 300 (roughly d3's default alpha schedule
    * from 1 down to alphaMin).
    */
   iterations?: number;
-  /** Kept-in-bounds margin around the layout canvas. Default 24. */
+  /** Margin kept between the node bounding box and the canvas edge. Default 24. */
   padding?: number;
   /**
    * Overall spacing multiplier (>= 1). Scales link rest distances and
@@ -401,14 +411,16 @@ const VELOCITY_RETAIN = 0.6;
  * positions (needed both for testability and so the graph doesn't visually
  * reshuffle on every re-render). Edge rest distances are standing-aware
  * (Ally/Friend shorter, Hostile/Enemy longer — see `standingDistanceFactor`)
- * and scale with `spacing`. `size` is the layout canvas, which callers may
- * make larger than the visible viewport; positions are clamped inside it.
+ * and scale with `spacing`. `size` is only a reference frame (seed radius,
+ * centering target, repulsion range) — the layout is an "infinite canvas":
+ * positions are never clamped, and the returned `size` is the natural extent
+ * of the content, however large it settles.
  */
 export function computeGraphLayout(
   graph: RelationshipGraph,
   size: Size,
   options: LayoutOptions = {}
-): PositionedNode[] {
+): GraphLayout {
   const {
     iterations = 300,
     padding = 24,
@@ -417,12 +429,14 @@ export function computeGraphLayout(
   } = options;
   const { nodes, edges } = graph;
   const count = nodes.length;
-  if (count === 0) {
-    return [];
-  }
 
   const width = Math.max(size.width, padding * 2 + 1);
   const height = Math.max(size.height, padding * 2 + 1);
+  const referenceSize: Size = { width, height };
+  if (count === 0) {
+    return { nodes: [], size: referenceSize };
+  }
+
   const centerX = width / 2;
   const centerY = height / 2;
   const startRadius = Math.max(1, Math.min(width, height) / 2 - padding);
@@ -434,7 +448,10 @@ export function computeGraphLayout(
 
   if (count === 1) {
     const only = ordered[0];
-    return [{ ...only, x: centerX, y: centerY }];
+    return {
+      nodes: [{ ...only, x: centerX, y: centerY }],
+      size: referenceSize,
+    };
   }
 
   // d3 mutates its node objects (x/y/vx/vy) — build copies, never hand it
@@ -472,8 +489,8 @@ export function computeGraphLayout(
       .distance(link => link.distance),
     forceManyBody<SimNode>()
       .strength(CHARGE_STRENGTH * spacing)
-      // Without a range cap, disconnected components repel each other all
-      // the way to the canvas edges.
+      // Without a range cap, disconnected components repel each other
+      // indefinitely and the canvas balloons.
       .distanceMax(Math.min(width, height) / 2),
     forceCollide<SimNode>(COLLIDE_RADIUS).iterations(2),
     // forceX/forceY rather than forceCenter: forceCenter only translates the
@@ -497,15 +514,33 @@ export function computeGraphLayout(
     });
   }
 
-  const simById = new Map(simNodes.map(node => [node.id, node]));
-  return ordered.map(node => {
-    const sim = simById.get(node.id) as SimNode;
-    return {
-      ...node,
-      x: Math.min(width - padding, Math.max(padding, sim.x)),
-      y: Math.min(height - padding, Math.max(padding, sim.y)),
-    };
+  // Infinite canvas: instead of clamping into the reference frame (which
+  // piled nodes up along the edges), shift the whole layout so its bounding
+  // box starts at `padding` and report the natural content size.
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  simNodes.forEach(node => {
+    minX = Math.min(minX, node.x);
+    minY = Math.min(minY, node.y);
+    maxX = Math.max(maxX, node.x);
+    maxY = Math.max(maxY, node.y);
   });
+  const offsetX = padding - minX;
+  const offsetY = padding - minY;
+
+  const simById = new Map(simNodes.map(node => [node.id, node]));
+  return {
+    nodes: ordered.map(node => {
+      const sim = simById.get(node.id) as SimNode;
+      return { ...node, x: sim.x + offsetX, y: sim.y + offsetY };
+    }),
+    size: {
+      width: maxX - minX + padding * 2,
+      height: maxY - minY + padding * 2,
+    },
+  };
 }
 
 /**

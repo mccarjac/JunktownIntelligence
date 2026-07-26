@@ -94,26 +94,23 @@ describe('RelationshipGraphScreen', () => {
     expect(getByLabelText('The Docks')).toBeTruthy();
   });
 
-  it('navigates to CharacterDetail with the character object from the info card', async () => {
+  it('navigates to CharacterDetail when a character node is tapped', async () => {
     const alice = makeCharacter({ id: 'c-alice', name: 'Alice' });
     storage.loadCharacters.mockResolvedValue([alice]);
     const nav = installNavigationMock();
 
-    const { getByTestId, getByLabelText, findByText } = render(
-      <RelationshipGraphScreen />
-    );
+    const { getByTestId, getByLabelText } = render(<RelationshipGraphScreen />);
     fireCanvasLayout(getByTestId);
 
     const node = await waitFor(() => getByLabelText('Alice'));
     fireEvent.press(node);
-    fireEvent.press(await findByText('View details'));
 
     expect(nav.navigate).toHaveBeenCalledWith('CharacterDetail', {
       character: alice,
     });
   });
 
-  it('navigates to FactionDetails with the faction name from the info card', async () => {
+  it('navigates to FactionDetails when a faction node is tapped', async () => {
     const alice = makeCharacter({
       id: 'c-alice',
       name: 'Alice',
@@ -125,21 +122,18 @@ describe('RelationshipGraphScreen', () => {
     ]);
     const nav = installNavigationMock();
 
-    const { getByTestId, getByLabelText, findByText } = render(
-      <RelationshipGraphScreen />
-    );
+    const { getByTestId, getByLabelText } = render(<RelationshipGraphScreen />);
     fireCanvasLayout(getByTestId);
 
     const node = await waitFor(() => getByLabelText('Brotherhood'));
     fireEvent.press(node);
-    fireEvent.press(await findByText('View details'));
 
     expect(nav.navigate).toHaveBeenCalledWith('FactionDetails', {
       factionName: 'Brotherhood',
     });
   });
 
-  it('navigates to LocationDetails with the location id from the info card', async () => {
+  it('navigates to LocationDetails when a location node is tapped', async () => {
     const alice = makeCharacter({
       id: 'c-alice',
       name: 'Alice',
@@ -151,17 +145,33 @@ describe('RelationshipGraphScreen', () => {
     ]);
     const nav = installNavigationMock();
 
+    const { getByTestId, getByLabelText } = render(<RelationshipGraphScreen />);
+    fireCanvasLayout(getByTestId);
+
+    const node = await waitFor(() => getByLabelText('The Docks'));
+    fireEvent.press(node);
+
+    expect(nav.navigate).toHaveBeenCalledWith('LocationDetails', {
+      locationId: 'loc-1',
+    });
+  });
+
+  it('opens the info card on long-press and navigates via "View details"', async () => {
+    const alice = makeCharacter({ id: 'c-alice', name: 'Alice' });
+    storage.loadCharacters.mockResolvedValue([alice]);
+    const nav = installNavigationMock();
+
     const { getByTestId, getByLabelText, findByText } = render(
       <RelationshipGraphScreen />
     );
     fireCanvasLayout(getByTestId);
 
-    const node = await waitFor(() => getByLabelText('The Docks'));
-    fireEvent.press(node);
+    const node = await waitFor(() => getByLabelText('Alice'));
+    fireEvent(node, 'longPress');
     fireEvent.press(await findByText('View details'));
 
-    expect(nav.navigate).toHaveBeenCalledWith('LocationDetails', {
-      locationId: 'loc-1',
+    expect(nav.navigate).toHaveBeenCalledWith('CharacterDetail', {
+      character: alice,
     });
   });
 
@@ -189,7 +199,7 @@ describe('RelationshipGraphScreen', () => {
     const aliceNode = await waitFor(() => getByLabelText('Alice'));
     expect(getByLabelText('Dave')).toBeTruthy();
 
-    fireEvent.press(aliceNode);
+    fireEvent(aliceNode, 'longPress');
     fireEvent.press(await findByText('Focus'));
 
     expect(await findByText('Focused on Alice')).toBeTruthy();
@@ -223,6 +233,21 @@ describe('RelationshipGraphScreen', () => {
 
     await waitFor(() => expect(queryByLabelText('Brotherhood')).toBeNull());
     expect(getByLabelText('Alice')).toBeTruthy();
+  });
+
+  it('persists the retired and isolated filter toggles', async () => {
+    const alice = makeCharacter({ id: 'c-alice', name: 'Alice' });
+    storage.loadCharacters.mockResolvedValue([alice]);
+
+    const { getByTestId, getByLabelText } = render(<RelationshipGraphScreen />);
+    fireCanvasLayout(getByTestId);
+    await waitFor(() => expect(getByLabelText('Alice')).toBeTruthy());
+
+    fireEvent.press(getByLabelText('Retired'));
+    expect(updateGraphPreferences).toHaveBeenCalledWith({ showRetired: true });
+
+    fireEvent.press(getByLabelText('Hide isolated'));
+    expect(updateGraphPreferences).toHaveBeenCalledWith({ hideIsolated: true });
   });
 
   it('persists spacing changes from the layout settings panel', async () => {

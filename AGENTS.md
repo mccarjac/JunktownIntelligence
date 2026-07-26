@@ -137,12 +137,16 @@ Path aliases (tsconfig + babel-plugin-module-resolver): `@/*` → `src/*`, plus
   order plus a seeded PRNG passed to each force's `initialize`. Edge rest
   distances are standing-aware (`standingDistanceFactor`: Ally/Friend
   shorter, Hostile/Enemy longer; the worse side of a disputed relationship
-  wins). User-tunable spacing lives in `src/utils/graphPreferences.ts`
-  (key `gameCharacterManager_graph_prefs`), edited via sliders in
-  `GraphSettingsPanel` (`@react-native-community/slider`); the screen lays
-  out on a virtual canvas up to 3x the viewport that `GraphCanvas` pans and
-  zooms (`contentSize` vs `containerSize` — content must stay centered for
-  `clampTranslation`'s symmetric bounds to hold). The d3 packages and
+  wins). The layout is an infinite canvas: positions are never clamped —
+  `computeGraphLayout` returns `{ nodes, size }` where `size` is the natural
+  content extent, and `GraphCanvas` pans/zooms it (`contentSize` vs
+  `containerSize` — content must stay centered for `clampTranslation`'s
+  symmetric bounds to hold). Tapping a node navigates straight to its detail
+  screen; long-press opens the info card (Focus / View details).
+  User-tunable spacing plus the persisted Retired / Hide-isolated filter
+  toggles live in `src/utils/graphPreferences.ts` (key
+  `gameCharacterManager_graph_prefs`); sliders in `GraphSettingsPanel`
+  (`@react-native-community/slider`). The d3 packages and
   `@react-native-community` are allow-listed in `jest.config.js`'s
   `transformIgnorePatterns` (ESM-only, like `uuid`).
 

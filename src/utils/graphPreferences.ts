@@ -14,16 +14,24 @@ export interface GraphPreferences {
    * 0 means standings don't affect distance at all.
    */
   standingSpread: number;
+  /** Show retired characters/factions in the graph. */
+  showRetired: boolean;
+  /** Hide entities with no connections. */
+  hideIsolated: boolean;
 }
 
 export const DEFAULT_GRAPH_PREFERENCES: GraphPreferences = {
   spacing: 1.5,
   standingSpread: 1,
+  showRetired: false,
+  hideIsolated: false,
 };
 
 const clampPreferences = (prefs: GraphPreferences): GraphPreferences => ({
   spacing: Math.min(3, Math.max(1, prefs.spacing)),
   standingSpread: Math.min(2, Math.max(0, prefs.standingSpread)),
+  showRetired: prefs.showRetired === true,
+  hideIsolated: prefs.hideIsolated === true,
 });
 
 /**

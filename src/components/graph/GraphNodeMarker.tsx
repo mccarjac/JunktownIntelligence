@@ -15,19 +15,24 @@ const truncateLabel = (label: string): string =>
 interface GraphNodeMarkerProps {
   node: PositionedNode;
   selected: boolean;
+  /** Tap: navigate straight to the entity's detail screen. */
   onPress: (node: PositionedNode) => void;
+  /** Long-press: open the info card (focus / details). */
+  onLongPress: (node: PositionedNode) => void;
 }
 
 export const GraphNodeMarker: React.FC<GraphNodeMarkerProps> = ({
   node,
   selected,
   onPress,
+  onLongPress,
 }) => {
   const fill = nodeTypeColor(node.type);
 
   return (
     <G
       onPress={() => onPress(node)}
+      onLongPress={() => onLongPress(node)}
       accessibilityRole="button"
       accessibilityLabel={node.label}
     >

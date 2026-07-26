@@ -26,8 +26,8 @@ describe('graphPreferences', () => {
       });
 
       expect(await getGraphPreferences()).toEqual({
+        ...DEFAULT_GRAPH_PREFERENCES,
         spacing: 2,
-        standingSpread: DEFAULT_GRAPH_PREFERENCES.standingSpread,
       });
     });
 
@@ -35,11 +35,14 @@ describe('graphPreferences', () => {
       (SafeAsyncStorageJSONParser.getItem as jest.Mock).mockResolvedValue({
         spacing: 99,
         standingSpread: -5,
+        showRetired: 'yes',
       });
 
       expect(await getGraphPreferences()).toEqual({
         spacing: 3,
         standingSpread: 0,
+        showRetired: false,
+        hideIsolated: false,
       });
     });
   });
@@ -54,11 +57,32 @@ describe('graphPreferences', () => {
 
       const result = await updateGraphPreferences({ standingSpread: 7 });
 
-      expect(result).toEqual({ spacing: 2, standingSpread: 2 });
+      const expected = {
+        ...DEFAULT_GRAPH_PREFERENCES,
+        spacing: 2,
+        standingSpread: 2,
+      };
+      expect(result).toEqual(expected);
       expect(SafeAsyncStorageJSONParser.setItem).toHaveBeenCalledWith(
         'gameCharacterManager_graph_prefs',
-        { spacing: 2, standingSpread: 2 }
+        expected
       );
+    });
+
+    it('persists the filter toggles', async () => {
+      (SafeAsyncStorageJSONParser.getItem as jest.Mock).mockResolvedValue(null);
+      (SafeAsyncStorageJSONParser.setItem as jest.Mock).mockResolvedValue(true);
+
+      const result = await updateGraphPreferences({
+        showRetired: true,
+        hideIsolated: true,
+      });
+
+      expect(result).toEqual({
+        ...DEFAULT_GRAPH_PREFERENCES,
+        showRetired: true,
+        hideIsolated: true,
+      });
     });
   });
 

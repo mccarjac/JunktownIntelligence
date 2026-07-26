@@ -47,11 +47,11 @@ import {
 
 type RelationshipGraphNavigationProp = StackNavigationProp<RootStackParamList>;
 
-const DEFAULT_FILTERS: GraphFilters = {
-  visibleTypes: new Set<GraphNodeType>(['character', 'faction', 'location']),
-  showRetired: false,
-  hideIsolated: false,
-};
+const DEFAULT_VISIBLE_TYPES = new Set<GraphNodeType>([
+  'character',
+  'faction',
+  'location',
+]);
 
 export const RelationshipGraphScreen: React.FC = () => {
   const navigation = useNavigation<RelationshipGraphNavigationProp>();
@@ -65,11 +65,24 @@ export const RelationshipGraphScreen: React.FC = () => {
     width: 0,
     height: 0,
   });
-  const [filters, setFilters] = useState<GraphFilters>(DEFAULT_FILTERS);
+  const [visibleTypes, setVisibleTypes] = useState<Set<GraphNodeType>>(
+    DEFAULT_VISIBLE_TYPES
+  );
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
+  // Single source of truth for everything persisted: layout spacing sliders
+  // plus the retired/isolated filter toggles.
   const [preferences, setPreferences] = useState<GraphPreferences>(
     DEFAULT_GRAPH_PREFERENCES
+  );
+
+  const filters: GraphFilters = useMemo(
+    () => ({
+      visibleTypes,
+      showRetired: preferences.showRetired,
+      hideIsolated: preferences.hideIsolated,
+    }),
+    [visibleTypes, preferences.showRetired, preferences.hideIsolated]
   );
 
   const loadData = useCallback(async () => {
@@ -126,9 +139,10 @@ export const RelationshipGraphScreen: React.FC = () => {
     return getNeighborhood(fullGraph, focusedNode.id, 1);
   }, [fullGraph, focusedNode]);
 
-  // The layout runs on a virtual canvas that grows with the spacing
-  // preference; the GraphCanvas pan/zoom gestures navigate the overflow.
-  const virtualSize = useMemo<Size>(() => {
+  // The reference frame for the simulation grows with the spacing
+  // preference; the layout itself is an infinite canvas — it returns its
+  // natural content size and GraphCanvas pan/zoom navigates the overflow.
+  const referenceFrame = useMemo<Size>(() => {
     const spreadFactor = Math.min(3, Math.max(1, preferences.spacing));
     return {
       width: containerSize.width * spreadFactor,
@@ -136,14 +150,15 @@ export const RelationshipGraphScreen: React.FC = () => {
     };
   }, [containerSize, preferences.spacing]);
 
-  const positionedNodes = useMemo(
+  const graphLayout = useMemo(
     () =>
-      computeGraphLayout(displayedGraph, virtualSize, {
+      computeGraphLayout(displayedGraph, referenceFrame, {
         spacing: preferences.spacing,
         standingSpread: preferences.standingSpread,
       }),
-    [displayedGraph, virtualSize, preferences]
+    [displayedGraph, referenceFrame, preferences]
   );
+  const positionedNodes = graphLayout.nodes;
 
   const selectedNode: PositionedNode | null =
     positionedNodes.find(n => n.id === selectedNodeId) ?? null;
@@ -153,7 +168,9 @@ export const RelationshipGraphScreen: React.FC = () => {
     setContainerSize({ width, height });
   };
 
-  const handleSelectNode = (node: PositionedNode) => {
+  // Tap navigates straight to the entity; long-press opens the info card
+  // (which still offers Focus and View details).
+  const handleLongPressNode = (node: PositionedNode) => {
     setSelectedNodeId(prev => (prev === node.id ? null : node.id));
   };
 
@@ -184,28 +201,32 @@ export const RelationshipGraphScreen: React.FC = () => {
   };
 
   const handleToggleType = (type: GraphNodeType) => {
-    setFilters(prev => {
-      const visibleTypes = new Set(prev.visibleTypes);
-      if (visibleTypes.has(type)) {
-        visibleTypes.delete(type);
+    setVisibleTypes(prev => {
+      const next = new Set(prev);
+      if (next.has(type)) {
+        next.delete(type);
       } else {
-        visibleTypes.add(type);
+        next.add(type);
       }
-      return { ...prev, visibleTypes };
+      return next;
     });
   };
 
   const handleToggleRetired = () => {
-    setFilters(prev => ({ ...prev, showRetired: !prev.showRetired }));
+    const showRetired = !preferences.showRetired;
+    setPreferences(prev => ({ ...prev, showRetired }));
+    // Persistence failures are non-fatal — the in-memory value still applies.
+    updateGraphPreferences({ showRetired }).catch(() => {});
   };
 
   const handleToggleHideIsolated = () => {
-    setFilters(prev => ({ ...prev, hideIsolated: !prev.hideIsolated }));
+    const hideIsolated = !preferences.hideIsolated;
+    setPreferences(prev => ({ ...prev, hideIsolated }));
+    updateGraphPreferences({ hideIsolated }).catch(() => {});
   };
 
   const handlePreferencesCommit = (prefs: GraphPreferences) => {
     setPreferences(prefs);
-    // Persistence failures are non-fatal — the in-memory value still applies.
     updateGraphPreferences(prefs).catch(() => {});
   };
 
@@ -273,11 +294,12 @@ export const RelationshipGraphScreen: React.FC = () => {
         ) : containerSize.width > 0 ? (
           <GraphCanvas
             containerSize={containerSize}
-            contentSize={virtualSize}
+            contentSize={graphLayout.size}
             nodes={positionedNodes}
             edges={displayedGraph.edges}
             selectedNodeId={selectedNodeId}
-            onSelectNode={handleSelectNode}
+            onPressNode={handleViewDetails}
+            onLongPressNode={handleLongPressNode}
           />
         ) : null}
       </View>

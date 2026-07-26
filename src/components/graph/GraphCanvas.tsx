@@ -23,7 +23,10 @@ interface GraphCanvasProps {
   nodes: PositionedNode[];
   edges: GraphEdge[];
   selectedNodeId: string | null;
-  onSelectNode: (node: PositionedNode) => void;
+  /** Tap on a node: navigate straight to its detail screen. */
+  onPressNode: (node: PositionedNode) => void;
+  /** Long-press on a node: open the info card (focus / details). */
+  onLongPressNode: (node: PositionedNode) => void;
 }
 
 const MAX_SCALE = 3;
@@ -34,7 +37,8 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
   nodes,
   edges,
   selectedNodeId,
-  onSelectNode,
+  onPressNode,
+  onLongPressNode,
 }) => {
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
@@ -185,7 +189,8 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
                 key={node.id}
                 node={node}
                 selected={node.id === selectedNodeId}
-                onPress={onSelectNode}
+                onPress={onPressNode}
+                onLongPress={onLongPressNode}
               />
             ))}
           </Svg>

@@ -322,7 +322,7 @@ describe('buildRelationshipGraph', () => {
 });
 
 describe('computeGraphLayout', () => {
-  it('returns a position for every node, clamped within the given size', () => {
+  it('returns a position for every node within the reported content size', () => {
     const alice = makeCharacter({
       id: 'c-alice',
       name: 'Alice',
@@ -337,17 +337,45 @@ describe('computeGraphLayout', () => {
       locations: [],
     });
 
-    const positions = computeGraphLayout(graph, { width: 400, height: 300 });
+    const layout = computeGraphLayout(graph, { width: 400, height: 300 });
 
-    expect(positions).toHaveLength(2);
-    positions.forEach(p => {
+    expect(layout.nodes).toHaveLength(2);
+    layout.nodes.forEach(p => {
       expect(p.x).toBeGreaterThanOrEqual(0);
-      expect(p.x).toBeLessThanOrEqual(400);
+      expect(p.x).toBeLessThanOrEqual(layout.size.width);
       expect(p.y).toBeGreaterThanOrEqual(0);
-      expect(p.y).toBeLessThanOrEqual(300);
+      expect(p.y).toBeLessThanOrEqual(layout.size.height);
       expect(Number.isFinite(p.x)).toBe(true);
       expect(Number.isFinite(p.y)).toBe(true);
     });
+  });
+
+  it('grows the content size beyond the reference frame instead of piling nodes on the edges', () => {
+    // 8 mutually-hostile factions on a tiny reference frame: the old
+    // clamped layout would pin most of them to the border; the infinite
+    // canvas must expand instead.
+    const names = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+    const factions = names.map(name =>
+      makeStoredFaction({
+        name,
+        relationships: names
+          .filter(other => other !== name)
+          .map(other => ({
+            factionName: other,
+            relationshipType: RelationshipStanding.Enemy,
+          })),
+      })
+    );
+    const graph = buildRelationshipGraph({
+      characters: [],
+      factions,
+      locations: [],
+    });
+
+    const layout = computeGraphLayout(graph, { width: 100, height: 100 });
+
+    expect(layout.size.width).toBeGreaterThan(100);
+    expect(layout.size.height).toBeGreaterThan(100);
   });
 
   it('is deterministic: identical input produces identical positions', () => {
@@ -384,14 +412,16 @@ describe('computeGraphLayout', () => {
       locations: [],
     });
 
-    const positions = computeGraphLayout(graph, { width: 200, height: 100 });
+    const layout = computeGraphLayout(graph, { width: 200, height: 100 });
 
-    expect(positions).toEqual([expect.objectContaining({ x: 100, y: 50 })]);
+    expect(layout.nodes).toEqual([expect.objectContaining({ x: 100, y: 50 })]);
+    expect(layout.size).toEqual({ width: 200, height: 100 });
   });
 
-  it('returns an empty array for an empty graph', () => {
+  it('returns no nodes for an empty graph', () => {
     expect(
       computeGraphLayout({ nodes: [], edges: [] }, { width: 100, height: 100 })
+        .nodes
     ).toEqual([]);
   });
 
@@ -448,7 +478,10 @@ describe('computeGraphLayout', () => {
       locations: [],
     });
 
-    const positions = computeGraphLayout(graph, { width: 1200, height: 1200 });
+    const { nodes: positions } = computeGraphLayout(graph, {
+      width: 1200,
+      height: 1200,
+    });
     const positionOf = (id: string) => {
       const position = positions.find(p => p.id === id);
       if (!position) {
@@ -492,7 +525,9 @@ describe('computeGraphLayout', () => {
     const size = { width: 2000, height: 2000 };
 
     const meanPairwiseDistance = (spacing: number): number => {
-      const positions = computeGraphLayout(graph, size, { spacing });
+      const { nodes: positions } = computeGraphLayout(graph, size, {
+        spacing,
+      });
       let total = 0;
       let pairs = 0;
       for (let i = 0; i < positions.length; i++) {
