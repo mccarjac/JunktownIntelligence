@@ -142,7 +142,12 @@ Path aliases (tsconfig + babel-plugin-module-resolver): `@/*` → `src/*`, plus
   content extent, and `GraphCanvas` pans/zooms it (`contentSize` vs
   `containerSize` — content must stay centered for `clampTranslation`'s
   symmetric bounds to hold). Tapping a node navigates straight to its detail
-  screen; long-press opens the info card (Focus / View details).
+  screen; long-press opens the info card (Focus / View details). Node taps
+  are detected by canvas-level RNGH Tap/LongPress gestures that invert the
+  pan/zoom transform (`containerPointToNormalized`) and hit-test node
+  centers — SVG-element `onPress` does not fire reliably on-device inside a
+  `GestureDetector`; the marker handlers remain only as a deduplicated
+  fallback (and for tests/accessibility).
   User-tunable spacing plus the persisted Retired / Hide-isolated filter
   toggles live in `src/utils/graphPreferences.ts` (key
   `gameCharacterManager_graph_prefs`); sliders in `GraphSettingsPanel`

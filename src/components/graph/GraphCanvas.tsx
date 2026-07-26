@@ -1,13 +1,19 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { StyleSheet } from 'react-native';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, {
+  runOnJS,
   useSharedValue,
   useAnimatedStyle,
   withTiming,
 } from 'react-native-reanimated';
 import Svg, { Line } from 'react-native-svg';
-import { clampTranslation, Size } from '@utils/mapCoordinates';
+import {
+  clampTranslation,
+  containerPointToNormalized,
+  normalizedToImagePoint,
+  Size,
+} from '@utils/mapCoordinates';
 import type { GraphEdge, PositionedNode } from '@utils/relationshipGraph';
 import { standingEdgeColor } from './graphColors';
 import { GraphNodeMarker } from './GraphNodeMarker';
@@ -30,6 +36,21 @@ interface GraphCanvasProps {
 }
 
 const MAX_SCALE = 3;
+/** How close (in content px) a tap must land to a node's center to hit it. */
+const NODE_HIT_RADIUS = 30;
+/**
+ * Node presses are detected twice: canvas-level gestures (below) and the
+ * SVG markers' own onPress/onLongPress. The SVG path doesn't fire reliably
+ * on-device inside a GestureDetector (notably Android / New Architecture),
+ * so the gestures are the primary mechanism — but where both DO fire, this
+ * window swallows the duplicate.
+ */
+const DUPLICATE_PRESS_WINDOW_MS = 600;
+
+interface LastPress {
+  id: string;
+  time: number;
+}
 
 export const GraphCanvas: React.FC<GraphCanvasProps> = ({
   containerSize,
@@ -47,6 +68,9 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
   const savedTranslateX = useSharedValue(0);
   const savedTranslateY = useSharedValue(0);
 
+  const lastPress = useRef<LastPress>({ id: '', time: 0 });
+  const lastLongPress = useRef<LastPress>({ id: '', time: 0 });
+
   // Zooming out to minScale fits the whole (possibly oversized) content in
   // the viewport; never above 1 so a small graph isn't blown up.
   const minScale =
@@ -57,6 +81,109 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
           containerSize.height / contentSize.height
         )
       : 1;
+
+  const shouldHandle = (
+    ref: React.MutableRefObject<LastPress>,
+    node: PositionedNode
+  ): boolean => {
+    const now = Date.now();
+    if (
+      ref.current.id === node.id &&
+      now - ref.current.time < DUPLICATE_PRESS_WINDOW_MS
+    ) {
+      return false;
+    }
+    ref.current = { id: node.id, time: now };
+    return true;
+  };
+
+  const handleMarkerPress = (node: PositionedNode) => {
+    if (shouldHandle(lastPress, node)) {
+      onPressNode(node);
+    }
+  };
+
+  const handleMarkerLongPress = (node: PositionedNode) => {
+    if (shouldHandle(lastLongPress, node)) {
+      onLongPressNode(node);
+    }
+  };
+
+  /**
+   * Maps a touch point in container coordinates to content coordinates
+   * (inverting the centered pan/zoom transform) and returns the node whose
+   * center is nearest, if within NODE_HIT_RADIUS.
+   */
+  const nodeAtContainerPoint = (
+    x: number,
+    y: number,
+    currentScale: number,
+    currentTranslateX: number,
+    currentTranslateY: number
+  ): PositionedNode | null => {
+    const normalized = containerPointToNormalized(
+      { x, y },
+      containerSize,
+      contentSize,
+      {
+        scale: currentScale,
+        translateX: currentTranslateX,
+        translateY: currentTranslateY,
+      }
+    );
+    if (!normalized) {
+      return null;
+    }
+    const point = normalizedToImagePoint(normalized, contentSize);
+    let nearest: PositionedNode | null = null;
+    let nearestDist = Infinity;
+    nodes.forEach(node => {
+      const dist = Math.hypot(node.x - point.x, node.y - point.y);
+      if (dist < nearestDist) {
+        nearest = node;
+        nearestDist = dist;
+      }
+    });
+    return nearest && nearestDist <= NODE_HIT_RADIUS ? nearest : null;
+  };
+
+  const handleCanvasTap = (
+    x: number,
+    y: number,
+    currentScale: number,
+    currentTranslateX: number,
+    currentTranslateY: number
+  ) => {
+    const node = nodeAtContainerPoint(
+      x,
+      y,
+      currentScale,
+      currentTranslateX,
+      currentTranslateY
+    );
+    if (node) {
+      handleMarkerPress(node);
+    }
+  };
+
+  const handleCanvasLongPress = (
+    x: number,
+    y: number,
+    currentScale: number,
+    currentTranslateX: number,
+    currentTranslateY: number
+  ) => {
+    const node = nodeAtContainerPoint(
+      x,
+      y,
+      currentScale,
+      currentTranslateX,
+      currentTranslateY
+    );
+    if (node) {
+      handleMarkerLongPress(node);
+    }
+  };
 
   const pinchGesture = Gesture.Pinch()
     .onUpdate(e => {
@@ -139,8 +266,38 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
       }
     });
 
+  const singleTap = Gesture.Tap()
+    .numberOfTaps(1)
+    .onEnd((e, success) => {
+      if (!success) {
+        return;
+      }
+      runOnJS(handleCanvasTap)(
+        e.x,
+        e.y,
+        scale.value,
+        translateX.value,
+        translateY.value
+      );
+    });
+
+  const longPressGesture = Gesture.LongPress()
+    .minDuration(400)
+    .onStart(e => {
+      runOnJS(handleCanvasLongPress)(
+        e.x,
+        e.y,
+        scale.value,
+        translateX.value,
+        translateY.value
+      );
+    });
+
   const composedGesture = Gesture.Simultaneous(
-    doubleTap,
+    // Single tap must wait for double-tap to fail, or it fires on the first
+    // tap of a double-tap zoom.
+    Gesture.Exclusive(doubleTap, singleTap),
+    longPressGesture,
     Gesture.Simultaneous(pinchGesture, panGesture)
   );
 
@@ -189,8 +346,8 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
                 key={node.id}
                 node={node}
                 selected={node.id === selectedNodeId}
-                onPress={onPressNode}
-                onLongPress={onLongPressNode}
+                onPress={handleMarkerPress}
+                onLongPress={handleMarkerLongPress}
               />
             ))}
           </Svg>
