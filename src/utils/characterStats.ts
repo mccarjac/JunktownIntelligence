@@ -1,5 +1,10 @@
 import { GameCharacter } from '../models/types';
 import { AVAILABLE_PERKS, AVAILABLE_DISTINCTIONS } from '../models/gameData';
+import {
+  getLabel,
+  afterworldsRuleset,
+  type RulesetDefinition,
+} from '../ruleset';
 
 export interface CharacterStats {
   totalCharacters: number;
@@ -10,8 +15,13 @@ export interface CharacterStats {
   factionStandings: Record<string, Record<string, number>>;
 }
 
+/**
+ * `ruleset` defaults to afterworldsRuleset so existing callers are
+ * unaffected; pass the active ruleset explicitly from a screen that has one.
+ */
 export const calculateCharacterStats = (
-  characters: GameCharacter[]
+  characters: GameCharacter[],
+  ruleset: RulesetDefinition = afterworldsRuleset
 ): CharacterStats => {
   if (!characters.length) {
     throw new Error('No characters available for statistics calculation');
@@ -61,7 +71,9 @@ export const calculateCharacterStats = (
 
   const commonPerks = Object.entries(perkCount)
     .map(([id, count]) => ({
-      name: AVAILABLE_PERKS.find(p => p.id === id)?.name || 'Unknown Perk',
+      name:
+        AVAILABLE_PERKS.find(p => p.id === id)?.name ||
+        `Unknown ${getLabel(ruleset, 'trait.singular')}`,
       count,
     }))
     .sort((a, b) => b.count - a.count)
@@ -80,7 +92,7 @@ export const calculateCharacterStats = (
     .map(([id, count]) => ({
       name:
         AVAILABLE_DISTINCTIONS.find(d => d.id === id)?.name ||
-        'Unknown Distinction',
+        `Unknown ${getLabel(ruleset, 'quality.singular')}`,
       count,
     }))
     .sort((a, b) => b.count - a.count)

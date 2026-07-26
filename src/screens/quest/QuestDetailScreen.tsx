@@ -24,6 +24,7 @@ import {
 import { colors as themeColors } from '@/styles/theme';
 import { commonStyles } from '@/styles/commonStyles';
 import { BaseDetailScreen, Section, CollapsibleSection } from '@/components';
+import { useLabels } from '@/ruleset';
 import { formatEventDate, formatEventDateShort } from '@utils/dateUtils';
 import {
   buildQuestTimeline,
@@ -69,6 +70,7 @@ interface QuestWithDetails extends GameQuest {
 export const QuestDetailScreen: React.FC = () => {
   const navigation = useNavigation<QuestsDetailNavigationProp>();
   const route = useRoute<QuestsDetailRouteProp>();
+  const label = useLabels();
   const { questId } = route.params;
 
   const [quest, setQuest] = useState<QuestWithDetails | null>(null);
@@ -209,7 +211,9 @@ export const QuestDetailScreen: React.FC = () => {
         )}
         {quest.junktownOffice && (
           <View style={styles.overviewRow}>
-            <Text style={styles.overviewLabel}>Junktown Office</Text>
+            <Text style={styles.overviewLabel}>
+              {label('questSponsor.singular')}
+            </Text>
             <Text style={styles.overviewValue}>{quest.junktownOffice}</Text>
           </View>
         )}

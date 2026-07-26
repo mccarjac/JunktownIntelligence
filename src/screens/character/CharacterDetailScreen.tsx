@@ -22,6 +22,7 @@ import {
   AVAILABLE_RECIPES,
 } from '@models/gameData';
 import { calculateDerivedStats } from '@/utils/derivedStats';
+import { useLabels } from '@/ruleset';
 import { GameCharacter, GameLocation, DiscordMessage } from '@/models/types';
 import {
   loadCharacters,
@@ -45,6 +46,7 @@ export const CharacterDetailScreen: React.FC = () => {
 
   const route = useRoute<CharacterDetailRouteProp>();
   const navigation = useNavigation<CharacterDetailNavigationProp>();
+  const label = useLabels();
   const { character } = route.params || {};
   const [allCharacters, setAllCharacters] = useState<GameCharacter[]>([]);
   const [locations, setLocations] = useState<GameLocation[]>([]);
@@ -190,7 +192,7 @@ export const CharacterDetailScreen: React.FC = () => {
     if (!tagScores || tagScores.size === 0) return null;
 
     return (
-      <Section title="Tag Scores">
+      <Section title={`${label('traitCategory.plural')} Scores`}>
         <View style={styles.tagScoresContainer}>
           {Array.from(tagScores.entries()).map(([tag, score]) => (
             <View key={tag} style={styles.tagScoreItem}>
@@ -209,7 +211,7 @@ export const CharacterDetailScreen: React.FC = () => {
     }
 
     return (
-      <CollapsibleSection title="Perks" defaultCollapsed={true}>
+      <CollapsibleSection title={label('trait.plural')} defaultCollapsed={true}>
         {AVAILABLE_PERKS.filter(perk =>
           character.perkIds.includes(perk.id)
         ).map(perk => (
@@ -218,7 +220,9 @@ export const CharacterDetailScreen: React.FC = () => {
             <Text style={styles.descriptionText}>{perk.description}</Text>
             {perk.recipeIds && perk.recipeIds.length > 0 && (
               <View style={styles.recipesContainer}>
-                <Text style={styles.recipesTitle}>Known Recipes:</Text>
+                <Text style={styles.recipesTitle}>
+                  Known {label('recipe.plural')}:
+                </Text>
                 {perk.recipeIds.map(recipeId => {
                   const recipe = AVAILABLE_RECIPES.find(r => r.id === recipeId);
                   if (!recipe) return null;
@@ -255,7 +259,10 @@ export const CharacterDetailScreen: React.FC = () => {
     }
 
     return (
-      <CollapsibleSection title="Distinctions" defaultCollapsed={true}>
+      <CollapsibleSection
+        title={label('quality.plural')}
+        defaultCollapsed={true}
+      >
         {AVAILABLE_DISTINCTIONS.filter(distinction =>
           character.distinctionIds.includes(distinction.id)
         ).map(distinction => (
@@ -352,7 +359,7 @@ export const CharacterDetailScreen: React.FC = () => {
     }
 
     return (
-      <Section title="Cyberware">
+      <Section title={label('modification.plural')}>
         {character.cyberware.map((cyber, index) => (
           <View key={index} style={styles.itemContainer}>
             <Text style={styles.titleText}>{cyber.name}</Text>

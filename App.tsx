@@ -51,6 +51,7 @@ import { DiscordMessageContextScreen } from './src/screens/discord/DiscordMessag
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ErrorBoundary } from './src/components';
+import { RulesetProvider, afterworldsRuleset, getLabel } from './src/ruleset';
 
 // Dark theme for navigation
 const DarkTheme = {
@@ -414,138 +415,140 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <SafeAreaProvider>
-        <GestureHandlerRootView style={appStyles.root}>
-          <NavigationContainer theme={DarkTheme}>
-            <Stack.Navigator
-              initialRouteName="Main"
-              screenOptions={{
-                headerStyle: {
-                  backgroundColor: '#262647',
-                  borderBottomWidth: 1,
-                  borderBottomColor: '#404066',
-                },
-                headerTintColor: '#FFFFFF',
-                headerTitleStyle: {
-                  fontWeight: '600',
-                  fontSize: 18,
-                  letterSpacing: 0.3,
-                  maxWidth: headerTitleMaxWidth,
-                },
-                headerTitleAlign: 'left',
-                cardStyle: {
-                  backgroundColor: '#0F0F23',
-                },
-              }}
-            >
-              <Stack.Screen
-                name="Main"
-                component={MainDrawer}
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen
-                name="CharacterDetail"
-                component={CharacterDetailScreen}
-                options={({ route }) => ({
-                  title: route.params?.character?.name || 'Character Detail',
-                })}
-              />
-              <Stack.Screen
-                name="CharacterForm"
-                component={CharacterFormScreen}
-                options={{ title: 'Character Form' }}
-              />
-              <Stack.Screen
-                name="CharacterSearch"
-                component={CharacterSearchScreen}
-                options={{ title: 'Search Characters' }}
-              />
-              <Stack.Screen
-                name="CharacterStats"
-                component={CharacterStatsScreen}
-                options={{ title: 'Character Statistics' }}
-              />
-              <Stack.Screen
-                name="FactionStats"
-                component={FactionStatsScreen}
-                options={{ title: 'Faction Statistics' }}
-              />
-              <Stack.Screen
-                name="FactionDetails"
-                component={FactionDetailsScreen}
-                options={({ route }) => ({
-                  title: route.params?.factionName || 'Faction Details',
-                })}
-              />
-              <Stack.Screen
-                name="FactionForm"
-                component={FactionFormScreen}
-                options={{ title: 'Create Faction' }}
-              />
-              <Stack.Screen
-                name="LocationDetails"
-                component={LocationDetailsScreen}
-                options={{ title: 'Location Details' }}
-              />
-              <Stack.Screen
-                name="LocationForm"
-                component={LocationFormScreen}
-                options={{ title: 'Create Location' }}
-              />
-              <Stack.Screen
-                name="LocationMap"
-                component={LocationMapScreen}
-                options={{ title: 'Junktown Map' }}
-              />
-              <Stack.Screen
-                name="EventsTimeline"
-                component={EventsTimelineScreen}
-                options={{ title: 'Events Timeline' }}
-              />
-              <Stack.Screen
-                name="EventsForm"
-                component={EventsFormScreen}
-                options={{ title: 'Event Form' }}
-              />
-              <Stack.Screen
-                name="EventsDetail"
-                component={EventsDetailScreen}
-                options={{ title: 'Event Details' }}
-              />
-              <Stack.Screen
-                name="QuestsList"
-                component={QuestListScreen}
-                options={{ title: 'Quests' }}
-              />
-              <Stack.Screen
-                name="QuestsForm"
-                component={QuestFormScreen}
-                options={{ title: 'Quest Form' }}
-              />
-              <Stack.Screen
-                name="QuestsDetail"
-                component={QuestDetailScreen}
-                options={{ title: 'Quest Details' }}
-              />
-              <Stack.Screen
-                name="QuestProposals"
-                component={QuestProposalScreen}
-                options={{ title: 'Quest Proposals' }}
-              />
-              <Stack.Screen
-                name="DiscordMessageContext"
-                component={DiscordMessageContextScreen}
-                options={{ title: 'Message Context' }}
-              />
-              <Stack.Screen
-                name="DiscordServerForm"
-                component={DiscordServerFormScreen}
-                options={{ title: 'Server Configuration' }}
-              />
-            </Stack.Navigator>
-          </NavigationContainer>
-        </GestureHandlerRootView>
-      </SafeAreaProvider>
+      <RulesetProvider>
+        <SafeAreaProvider>
+          <GestureHandlerRootView style={appStyles.root}>
+            <NavigationContainer theme={DarkTheme}>
+              <Stack.Navigator
+                initialRouteName="Main"
+                screenOptions={{
+                  headerStyle: {
+                    backgroundColor: '#262647',
+                    borderBottomWidth: 1,
+                    borderBottomColor: '#404066',
+                  },
+                  headerTintColor: '#FFFFFF',
+                  headerTitleStyle: {
+                    fontWeight: '600',
+                    fontSize: 18,
+                    letterSpacing: 0.3,
+                    maxWidth: headerTitleMaxWidth,
+                  },
+                  headerTitleAlign: 'left',
+                  cardStyle: {
+                    backgroundColor: '#0F0F23',
+                  },
+                }}
+              >
+                <Stack.Screen
+                  name="Main"
+                  component={MainDrawer}
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="CharacterDetail"
+                  component={CharacterDetailScreen}
+                  options={({ route }) => ({
+                    title: route.params?.character?.name || 'Character Detail',
+                  })}
+                />
+                <Stack.Screen
+                  name="CharacterForm"
+                  component={CharacterFormScreen}
+                  options={{ title: 'Character Form' }}
+                />
+                <Stack.Screen
+                  name="CharacterSearch"
+                  component={CharacterSearchScreen}
+                  options={{ title: 'Search Characters' }}
+                />
+                <Stack.Screen
+                  name="CharacterStats"
+                  component={CharacterStatsScreen}
+                  options={{ title: 'Character Statistics' }}
+                />
+                <Stack.Screen
+                  name="FactionStats"
+                  component={FactionStatsScreen}
+                  options={{ title: 'Faction Statistics' }}
+                />
+                <Stack.Screen
+                  name="FactionDetails"
+                  component={FactionDetailsScreen}
+                  options={({ route }) => ({
+                    title: route.params?.factionName || 'Faction Details',
+                  })}
+                />
+                <Stack.Screen
+                  name="FactionForm"
+                  component={FactionFormScreen}
+                  options={{ title: 'Create Faction' }}
+                />
+                <Stack.Screen
+                  name="LocationDetails"
+                  component={LocationDetailsScreen}
+                  options={{ title: 'Location Details' }}
+                />
+                <Stack.Screen
+                  name="LocationForm"
+                  component={LocationFormScreen}
+                  options={{ title: 'Create Location' }}
+                />
+                <Stack.Screen
+                  name="LocationMap"
+                  component={LocationMapScreen}
+                  options={{ title: getLabel(afterworldsRuleset, 'map.label') }}
+                />
+                <Stack.Screen
+                  name="EventsTimeline"
+                  component={EventsTimelineScreen}
+                  options={{ title: 'Events Timeline' }}
+                />
+                <Stack.Screen
+                  name="EventsForm"
+                  component={EventsFormScreen}
+                  options={{ title: 'Event Form' }}
+                />
+                <Stack.Screen
+                  name="EventsDetail"
+                  component={EventsDetailScreen}
+                  options={{ title: 'Event Details' }}
+                />
+                <Stack.Screen
+                  name="QuestsList"
+                  component={QuestListScreen}
+                  options={{ title: 'Quests' }}
+                />
+                <Stack.Screen
+                  name="QuestsForm"
+                  component={QuestFormScreen}
+                  options={{ title: 'Quest Form' }}
+                />
+                <Stack.Screen
+                  name="QuestsDetail"
+                  component={QuestDetailScreen}
+                  options={{ title: 'Quest Details' }}
+                />
+                <Stack.Screen
+                  name="QuestProposals"
+                  component={QuestProposalScreen}
+                  options={{ title: 'Quest Proposals' }}
+                />
+                <Stack.Screen
+                  name="DiscordMessageContext"
+                  component={DiscordMessageContextScreen}
+                  options={{ title: 'Message Context' }}
+                />
+                <Stack.Screen
+                  name="DiscordServerForm"
+                  component={DiscordServerFormScreen}
+                  options={{ title: 'Server Configuration' }}
+                />
+              </Stack.Navigator>
+            </NavigationContainer>
+          </GestureHandlerRootView>
+        </SafeAreaProvider>
+      </RulesetProvider>
     </ErrorBoundary>
   );
 }

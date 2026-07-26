@@ -24,10 +24,12 @@ module.exports = {
     'src/utils/**/*.{ts,tsx}',
     'src/components/**/*.{ts,tsx}',
     'src/screens/**/*.{ts,tsx}',
+    'src/ruleset/**/*.{ts,tsx}',
     '!src/utils/**/*.d.ts',
     '!src/utils/**/index.{ts,tsx}',
     '!src/components/**/index.{ts,tsx}',
     '!src/screens/**/index.{ts,tsx}',
+    '!src/ruleset/index.{ts,tsx}',
   ],
   // No coverageThreshold for now — coverage reporting is informational only
   // (see .github/workflows/coverage.yml). Thresholds return once the gaps

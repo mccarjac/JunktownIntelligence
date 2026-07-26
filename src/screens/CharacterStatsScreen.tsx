@@ -16,8 +16,11 @@ import {
 import { GameCharacter } from '@/models/types';
 import { colors as themeColors } from '@/styles/theme';
 import { commonStyles } from '@/styles/commonStyles';
+import { useLabels, useRuleset } from '@/ruleset';
 
 export const CharacterStatsScreen = () => {
+  const label = useLabels();
+  const { ruleset } = useRuleset();
   const [stats, setStats] = useState<CharacterStats | null>(null);
   const [selectedSlice, setSelectedSlice] = useState<string | null>(null);
   const [showOnlyPresent, setShowOnlyPresent] = useState<boolean>(false);
@@ -25,9 +28,9 @@ export const CharacterStatsScreen = () => {
 
   const calculateStats = useCallback(
     (characters: GameCharacter[]): CharacterStats => {
-      return calculateCharacterStats(characters);
+      return calculateCharacterStats(characters, ruleset);
     },
-    []
+    [ruleset]
   );
 
   // Calculate stats whenever characters or filter changes
@@ -66,7 +69,7 @@ export const CharacterStatsScreen = () => {
       const stats = calculateStats(filteredCharacters);
       setStats(stats);
     }
-  }, [showOnlyPresent]);
+  }, [showOnlyPresent, calculateStats]);
 
   useFocusEffect(
     useCallback(() => {
@@ -198,7 +201,9 @@ export const CharacterStatsScreen = () => {
             </View>
 
             <View style={styles.section}>
-              <Text style={styles.sectionHeader}>Species Distribution</Text>
+              <Text style={styles.sectionHeader}>
+                {label('archetype.plural')} Distribution
+              </Text>
               {getSpeciesPieChartData().length > 0 && (
                 <View style={styles.chartContainer}>
                   <PieChart
@@ -296,7 +301,9 @@ export const CharacterStatsScreen = () => {
             </View>
 
             <View style={styles.section}>
-              <Text style={styles.sectionHeader}>Most Common Perks</Text>
+              <Text style={styles.sectionHeader}>
+                Most Common {label('trait.plural')}
+              </Text>
               {stats.commonPerks.map(({ name, count }) => (
                 <Text key={name} style={styles.listItemText}>
                   {name}: {count} characters
@@ -305,7 +312,9 @@ export const CharacterStatsScreen = () => {
             </View>
 
             <View style={styles.section}>
-              <Text style={styles.sectionHeader}>Most Common Distinctions</Text>
+              <Text style={styles.sectionHeader}>
+                Most Common {label('quality.plural')}
+              </Text>
               {stats.commonDistinctions.map(({ name, count }) => (
                 <Text key={name} style={styles.listItemText}>
                   {name}: {count} characters

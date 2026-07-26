@@ -42,12 +42,16 @@ import {
 import { colors as themeColors } from '@/styles/theme';
 import { commonStyles } from '@/styles/commonStyles';
 import { BaseFormScreen } from '@/components';
+import { useLabels, useRuleset } from '@/ruleset';
 
 type CharacterFormRouteProp = RouteProp<RootStackParamList, 'CharacterForm'>;
 
 export const CharacterFormScreen: React.FC = () => {
   const navigation = useNavigation();
   const route = useRoute<CharacterFormRouteProp>();
+  const label = useLabels();
+  const { ruleset } = useRuleset();
+  const maxQualities = ruleset.limits?.maxQualities ?? 3;
   const editingCharacter = route.params?.character;
   const [selectedPerkTag, setSelectedPerkTag] = useState<string>('');
   const [allCharacters, setAllCharacters] = useState<GameCharacter[]>([]);
@@ -330,7 +334,7 @@ export const CharacterFormScreen: React.FC = () => {
       </View>
 
       <View style={styles.formSection}>
-        <Text style={styles.label}>Species</Text>
+        <Text style={styles.label}>{label('archetype.singular')}</Text>
         <Picker
           selectedValue={form.species}
           style={[styles.picker, { flex: 1 }]}
@@ -367,19 +371,24 @@ export const CharacterFormScreen: React.FC = () => {
           style={styles.sectionHeader}
           onPress={() => setPerksExpanded(!perksExpanded)}
         >
-          <Text style={styles.label}>Perks</Text>
+          <Text style={styles.label}>{label('trait.plural')}</Text>
           <Text style={styles.expandIcon}>{perksExpanded ? '▼' : '▶'}</Text>
         </TouchableOpacity>
         {perksExpanded && (
           <>
             <View style={styles.filterContainer}>
-              <Text style={styles.filterLabel}>Filter by Tag:</Text>
+              <Text style={styles.filterLabel}>
+                Filter by {label('traitCategory.singular')}:
+              </Text>
               <Picker
                 selectedValue={selectedPerkTag}
                 style={[styles.picker, { flex: 1 }]}
                 onValueChange={setSelectedPerkTag}
               >
-                <Picker.Item label="All Tags" value="" />
+                <Picker.Item
+                  label={`All ${label('traitCategory.plural')}`}
+                  value=""
+                />
                 {Array.from(new Set(AVAILABLE_PERKS.map(perk => perk.tag)))
                   .sort()
                   .map(tag => (
@@ -416,7 +425,7 @@ export const CharacterFormScreen: React.FC = () => {
                           <Text style={styles.speciesText}>
                             {perk.allowedSpecies.length === 1
                               ? perk.allowedSpecies[0]
-                              : `${perk.allowedSpecies.length} Species`}
+                              : `${perk.allowedSpecies.length} ${label('archetype.plural')}`}
                           </Text>
                         )}
                       <Text style={styles.tagText}>{perk.tag}</Text>
@@ -435,7 +444,7 @@ export const CharacterFormScreen: React.FC = () => {
           style={styles.sectionHeader}
           onPress={() => setDistinctionsExpanded(!distinctionsExpanded)}
         >
-          <Text style={styles.label}>Distinctions</Text>
+          <Text style={styles.label}>{label('quality.plural')}</Text>
           <Text style={styles.expandIcon}>
             {distinctionsExpanded ? '▼' : '▶'}
           </Text>
@@ -461,7 +470,7 @@ export const CharacterFormScreen: React.FC = () => {
                       id => id !== distinction.id
                     );
                     handleChange('distinctionIds', newDistinctionIds);
-                  } else if (form.distinctionIds.length < 3) {
+                  } else if (form.distinctionIds.length < maxQualities) {
                     // Allow selection if under limit
                     const newDistinctionIds = [
                       ...form.distinctionIds,
@@ -472,7 +481,10 @@ export const CharacterFormScreen: React.FC = () => {
                     // Show alert when limit reached
                     Alert.alert(
                       'Maximum Reached',
-                      'You can only select up to 3 distinctions.'
+                      `You can only select up to ${maxQualities} ${label(
+                        'quality.plural',
+                        'lower'
+                      )}.`
                     );
                   }
                 }}
@@ -485,7 +497,7 @@ export const CharacterFormScreen: React.FC = () => {
       </View>
 
       <View style={styles.formSection}>
-        <Text style={styles.label}>Cyberware</Text>
+        <Text style={styles.label}>{label('modification.plural')}</Text>
         {form.cyberware &&
           form.cyberware.map((cyber, index) => (
             <View key={index} style={styles.cyberwareContainer}>
@@ -498,7 +510,7 @@ export const CharacterFormScreen: React.FC = () => {
                     newCyberware[index] = { ...cyber, name: value };
                     handleChange('cyberware', newCyberware);
                   }}
-                  placeholder="Cyberware name"
+                  placeholder={`${label('modification.singular')} name`}
                 />
                 <TouchableOpacity
                   style={styles.removeButton}
@@ -621,7 +633,8 @@ export const CharacterFormScreen: React.FC = () => {
                 </View>
                 <View style={styles.tagModifiersSection}>
                   <Text style={styles.tagModifiersLabel}>
-                    Tag Score Modifiers (optional):
+                    {label('traitCategory.singular')} Score Modifiers
+                    (optional):
                   </Text>
                   <View style={styles.tagModifiersList}>
                     {Object.values(PerkTag).map(tag => {
@@ -734,14 +747,17 @@ export const CharacterFormScreen: React.FC = () => {
                         handleChange('cyberware', newCyberware);
                       } else {
                         Alert.alert(
-                          'All Tags Added',
-                          'All available tags already have modifiers.'
+                          `All ${label('traitCategory.plural')} Added`,
+                          `All available ${label(
+                            'traitCategory.plural',
+                            'lower'
+                          )} already have modifiers.`
                         );
                       }
                     }}
                   >
                     <Text style={styles.addTagModifierButtonText}>
-                      + Add Tag Modifier
+                      + Add {label('traitCategory.singular')} Modifier
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -761,7 +777,9 @@ export const CharacterFormScreen: React.FC = () => {
             ]);
           }}
         >
-          <Text style={styles.addButtonText}>Add Cyberware</Text>
+          <Text style={styles.addButtonText}>
+            Add {label('modification.singular')}
+          </Text>
         </TouchableOpacity>
       </View>
 

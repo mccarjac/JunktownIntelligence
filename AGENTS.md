@@ -39,6 +39,7 @@ src/
   components/screens/   Base{List,Form,Detail}Screen — generic screen scaffolds
   screens/<feature>/    character/ faction/ location/ events/ discord/
   models/               types.ts (all domain types), gameData.ts, speciesTypes.ts
+  ruleset/               pluggable ruleset schema, provider, validator, terminology
   navigation/types.ts   navigator + param-list types
   styles/               theme.ts (colors/spacing/typography), commonStyles.ts
   utils/                storage, export/import, discord, git, stats
@@ -78,6 +79,41 @@ Path aliases (tsconfig + babel-plugin-module-resolver): `@/*` → `src/*`, plus
   there rather than growing it inside `gitIntegration.ts`. Network/offline
   failures are classified by `src/utils/syncErrors.ts`
   (`classifySyncError`) rather than surfaced as raw fetch error text.
+
+## Ruleset layer
+
+This is the seam a genre-neutral fork (`mccarjac/Lore`) plugs into. Today's
+Afterworlds data (`gameData.ts`, `speciesTypes.ts`) is unchanged and read-only
+— `src/ruleset/defaultRuleset.ts` derives a `RulesetDefinition` from it via a
+transform, not a hand-written literal, so it can never drift out of sync as
+Phase 1 issues rename fields.
+
+- `src/ruleset/types.ts` — the `RulesetDefinition` schema (archetypes, traits,
+  trait categories, qualities, resources, category-bonus rules, feature
+  flags, terminology). **Must stay JSON-serializable** — no functions, no
+  `ImageSourcePropType`/`require()` results anywhere in the definition. That
+  constraint is what keeps the backlogged in-app ruleset editor possible;
+  `validate.ts` enforces it at runtime. Bundled images referenced by a
+  ruleset (map, branding) go through the separate `RulesetAssets` map in
+  `src/ruleset/assets.ts` instead, keyed by string.
+- `src/ruleset/validate.ts` — `validateRuleset()` returns
+  `{ valid, issues }` rather than throwing, so a future user-authored ruleset
+  can surface errors in UI instead of crashing at startup. `RulesetProvider`
+  throws on an invalid ruleset in `__DEV__` and logs-and-renders otherwise.
+- `src/ruleset/context.tsx` — `RulesetProvider` / `useRuleset()`.
+  **`useRuleset()` returns the default Afterworlds ruleset outside a
+  provider rather than throwing** — every screen test in `tst/` renders
+  bare, and a throwing hook would require wrapping all of them. Use
+  `tst/helpers/ruleset.tsx`'s `renderWithRuleset()` for a test that needs a
+  non-default ruleset.
+- `src/ruleset/terminology.ts` — `useLabels()` (components) and `getLabel()`
+  (non-component code, e.g. `App.tsx` navigator options, or pure utils like
+  `factionStats.ts`/`characterStats.ts` that take a `ruleset` parameter
+  rather than importing one) look up a term key (`'trait.plural'`) against
+  the ruleset's `terminology` overrides, falling back to a neutral default.
+  Screens must not hardcode domain nouns (Species/Perk/Tag/Distinction/
+  Cyberware/Junktown Office) — look them up so a different ruleset can say
+  something else without a code change.
 
 ## Conventions & gotchas
 

@@ -26,6 +26,7 @@ import {
 import { RootStackParamList } from '@/navigation/types';
 import { colors as themeColors } from '@/styles/theme';
 import { commonStyles } from '@/styles/commonStyles';
+import { useLabels } from '@/ruleset';
 
 type SearchScreenNavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -49,6 +50,7 @@ interface SearchCriteria {
 
 export const CharacterSearchScreen: React.FC = () => {
   const navigation = useNavigation<SearchScreenNavigationProp>();
+  const label = useLabels();
   const [searchCriteria, setSearchCriteria] = useState<SearchCriteria>({
     presentStatus: 'any',
     retiredStatus: 'active', // Default to searching only active (non-retired) characters
@@ -146,7 +148,7 @@ export const CharacterSearchScreen: React.FC = () => {
         <Text style={styles.sectionTitle}>Search Criteria</Text>
 
         <View style={styles.criteriaItem}>
-          <Text style={styles.label}>Perk</Text>
+          <Text style={styles.label}>{label('trait.singular')}</Text>
           <Picker
             selectedValue={searchCriteria.perkId}
             style={styles.picker}
@@ -157,7 +159,7 @@ export const CharacterSearchScreen: React.FC = () => {
               }))
             }
           >
-            <Picker.Item label="Any Perk" value="" />
+            <Picker.Item label={`Any ${label('trait.singular')}`} value="" />
             {AVAILABLE_PERKS.map(perk => (
               <Picker.Item key={perk.id} label={perk.name} value={perk.id} />
             ))}
@@ -165,7 +167,7 @@ export const CharacterSearchScreen: React.FC = () => {
         </View>
 
         <View style={styles.criteriaItem}>
-          <Text style={styles.label}>Distinction</Text>
+          <Text style={styles.label}>{label('quality.singular')}</Text>
           <Picker
             selectedValue={searchCriteria.distinctionId}
             style={styles.picker}
@@ -176,7 +178,7 @@ export const CharacterSearchScreen: React.FC = () => {
               }))
             }
           >
-            <Picker.Item label="Any Distinction" value="" />
+            <Picker.Item label={`Any ${label('quality.singular')}`} value="" />
             {AVAILABLE_DISTINCTIONS.map(distinction => (
               <Picker.Item
                 key={distinction.id}
@@ -188,7 +190,9 @@ export const CharacterSearchScreen: React.FC = () => {
         </View>
 
         <View style={styles.criteriaItem}>
-          <Text style={styles.label}>Tag Score</Text>
+          <Text style={styles.label}>
+            {label('traitCategory.singular')} Score
+          </Text>
           <View style={styles.tagScoreContainer}>
             <Picker
               selectedValue={searchCriteria.tag}
@@ -200,7 +204,10 @@ export const CharacterSearchScreen: React.FC = () => {
                 }))
               }
             >
-              <Picker.Item label="Any Tag" value="" />
+              <Picker.Item
+                label={`Any ${label('traitCategory.singular')}`}
+                value=""
+              />
               {getAllTags().map(tag => (
                 <Picker.Item key={tag} label={tag} value={tag} />
               ))}

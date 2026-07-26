@@ -20,11 +20,14 @@ import { colors as themeColors } from '@/styles/theme';
 import { commonStyles } from '@/styles/commonStyles';
 import { PerkTag } from '@/models/gameData';
 import { CollapsibleSection, InfoButton } from '@/components';
+import { useLabels, useRuleset } from '@/ruleset';
 
 type FactionStatsNavigationProp = StackNavigationProp<RootStackParamList>;
 
 export const FactionStatsScreen: React.FC = () => {
   const navigation = useNavigation<FactionStatsNavigationProp>();
+  const label = useLabels();
+  const { ruleset } = useRuleset();
   const [factionStats, setFactionStats] = useState<FactionStats[]>([]);
   const [selectedFaction, setSelectedFaction] = useState<string | null>(null);
   const [combinedAnalysis, setCombinedAnalysis] =
@@ -52,7 +55,8 @@ export const FactionStatsScreen: React.FC = () => {
         calculateFactionStats(
           faction.name,
           activeCharacters,
-          faction.relationships || []
+          faction.relationships || [],
+          ruleset
         )
       );
 
@@ -65,7 +69,7 @@ export const FactionStatsScreen: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [ruleset]);
 
   useFocusEffect(
     useCallback(() => {
@@ -95,7 +99,8 @@ export const FactionStatsScreen: React.FC = () => {
         const analysis = calculateCombinedFactionStats(
           factionName,
           activeCharacters,
-          relationshipsMap
+          relationshipsMap,
+          ruleset
         );
         setCombinedAnalysis(analysis);
       } catch (error) {
@@ -192,10 +197,30 @@ export const FactionStatsScreen: React.FC = () => {
             {/* Perk Tags Analysis */}
             <View style={styles.sectionWithInfo}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Perk Tag Analysis</Text>
+                <Text style={styles.sectionTitle}>
+                  {label('trait.singular')} {label('traitCategory.singular')}{' '}
+                  Analysis
+                </Text>
                 <InfoButton
-                  title="Perk Tag Analysis"
-                  content="This graph shows the distribution of perk tags among faction members. Each bar represents the total count of perks with that tag across all members. For example, if 5 members each have 2 Strength perks, the Strength bar would show 10. This helps identify the faction's collective strengths and specializations."
+                  title={`${label('trait.singular')} ${label(
+                    'traitCategory.singular'
+                  )} Analysis`}
+                  content={`This graph shows the distribution of ${label(
+                    'trait.singular',
+                    'lower'
+                  )} ${label(
+                    'traitCategory.plural',
+                    'lower'
+                  )} among faction members. Each bar represents the total count of ${label(
+                    'trait.plural',
+                    'lower'
+                  )} with that ${label(
+                    'traitCategory.singular',
+                    'lower'
+                  )} across all members. For example, if 5 members each have 2 Strength ${label(
+                    'trait.plural',
+                    'lower'
+                  )}, the Strength bar would show 10. This helps identify the faction's collective strengths and specializations.`}
                 />
               </View>
               {stats.topPerkTags.length > 0 ? (
@@ -210,13 +235,18 @@ export const FactionStatsScreen: React.FC = () => {
                 </View>
               ) : (
                 <Text style={styles.emptyText}>
-                  No perk tags found for this faction
+                  No {label('trait.singular', 'lower')}{' '}
+                  {label('traitCategory.plural', 'lower')} found for this
+                  faction
                 </Text>
               )}
             </View>
 
             {/* Common Perks */}
-            <CollapsibleSection title="Common Perks" defaultCollapsed={true}>
+            <CollapsibleSection
+              title={`Common ${label('trait.plural')}`}
+              defaultCollapsed={true}
+            >
               {stats.commonPerks.length > 0 ? (
                 <View style={styles.listContainer}>
                   {stats.commonPerks.map((perk, index) => (
@@ -229,13 +259,15 @@ export const FactionStatsScreen: React.FC = () => {
                   ))}
                 </View>
               ) : (
-                <Text style={styles.emptyText}>No perks found</Text>
+                <Text style={styles.emptyText}>
+                  No {label('trait.plural', 'lower')} found
+                </Text>
               )}
             </CollapsibleSection>
 
             {/* Common Distinctions */}
             <CollapsibleSection
-              title="Common Distinctions"
+              title={`Common ${label('quality.plural')}`}
               defaultCollapsed={true}
             >
               {stats.commonDistinctions.length > 0 ? (
@@ -253,13 +285,15 @@ export const FactionStatsScreen: React.FC = () => {
                   ))}
                 </View>
               ) : (
-                <Text style={styles.emptyText}>No distinctions found</Text>
+                <Text style={styles.emptyText}>
+                  No {label('quality.plural', 'lower')} found
+                </Text>
               )}
             </CollapsibleSection>
 
             {/* Species Distribution */}
             <CollapsibleSection
-              title="Species Distribution"
+              title={`${label('archetype.plural')} Distribution`}
               defaultCollapsed={true}
             >
               {Object.keys(stats.speciesDistribution).length > 0 ? (
@@ -274,7 +308,9 @@ export const FactionStatsScreen: React.FC = () => {
                     ))}
                 </View>
               ) : (
-                <Text style={styles.emptyText}>No species data available</Text>
+                <Text style={styles.emptyText}>
+                  No {label('archetype.singular', 'lower')} data available
+                </Text>
               )}
             </CollapsibleSection>
 
@@ -347,7 +383,13 @@ export const FactionStatsScreen: React.FC = () => {
                     </Text>
                     <InfoButton
                       title="Combined Force Analysis"
-                      content="This analysis shows the total military strength when a faction and its allies work together. 'Direct Members' are the faction's own members. 'Allied Members' are members from allied factions. 'Total Combined' is the sum of all members. 'Strength Multiplier' shows how much stronger the faction is with allies compared to fighting alone. The perk tag bars below show the combined capabilities of all allied forces."
+                      content={`This analysis shows the total military strength when a faction and its allies work together. 'Direct Members' are the faction's own members. 'Allied Members' are members from allied factions. 'Total Combined' is the sum of all members. 'Strength Multiplier' shows how much stronger the faction is with allies compared to fighting alone. The ${label(
+                        'trait.singular',
+                        'lower'
+                      )} ${label(
+                        'traitCategory.singular',
+                        'lower'
+                      )} bars below show the combined capabilities of all allied forces.`}
                     />
                   </View>
                   <View style={styles.combinedAnalysisCard}>

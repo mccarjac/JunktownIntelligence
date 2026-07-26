@@ -5,6 +5,11 @@ import {
   PerkTag,
 } from '../models/gameData';
 import { FactionRelationship } from './characterStorage';
+import {
+  getLabel,
+  afterworldsRuleset,
+  type RulesetDefinition,
+} from '../ruleset';
 
 export interface FactionStats {
   factionName: string;
@@ -42,12 +47,15 @@ export interface CombinedFactionAnalysis {
 }
 
 /**
- * Calculate statistics for a single faction based on its members
+ * Calculate statistics for a single faction based on its members.
+ * `ruleset` defaults to afterworldsRuleset so existing callers are
+ * unaffected; pass the active ruleset explicitly from a screen that has one.
  */
 export const calculateFactionStats = (
   factionName: string,
   allCharacters: GameCharacter[],
-  factionRelationships: FactionRelationship[] = []
+  factionRelationships: FactionRelationship[] = [],
+  ruleset: RulesetDefinition = afterworldsRuleset
 ): FactionStats => {
   // Get faction members (only positive relationships count as members)
   const members = allCharacters.filter(char => {
@@ -114,7 +122,9 @@ export const calculateFactionStats = (
 
   const commonPerks = Object.entries(perkCount)
     .map(([id, count]) => ({
-      name: AVAILABLE_PERKS.find(p => p.id === id)?.name || 'Unknown Perk',
+      name:
+        AVAILABLE_PERKS.find(p => p.id === id)?.name ||
+        `Unknown ${getLabel(ruleset, 'trait.singular')}`,
       count,
       percentage: (count / totalMembers) * 100,
     }))
@@ -134,7 +144,7 @@ export const calculateFactionStats = (
     .map(([id, count]) => ({
       name:
         AVAILABLE_DISTINCTIONS.find(d => d.id === id)?.name ||
-        'Unknown Distinction',
+        `Unknown ${getLabel(ruleset, 'quality.singular')}`,
       count,
       percentage: (count / totalMembers) * 100,
     }))
@@ -188,7 +198,8 @@ export const calculateFactionStats = (
 export const calculateCombinedFactionStats = (
   factionName: string,
   allCharacters: GameCharacter[],
-  allFactionRelationships: Map<string, FactionRelationship[]>
+  allFactionRelationships: Map<string, FactionRelationship[]>,
+  ruleset: RulesetDefinition = afterworldsRuleset
 ): CombinedFactionAnalysis => {
   // Get base stats for the main faction
   const mainFactionRelationships =
@@ -196,7 +207,8 @@ export const calculateCombinedFactionStats = (
   const baseStats = calculateFactionStats(
     factionName,
     allCharacters,
-    mainFactionRelationships
+    mainFactionRelationships,
+    ruleset
   );
 
   // Get allied factions
@@ -213,7 +225,8 @@ export const calculateCombinedFactionStats = (
     const allyStats = calculateFactionStats(
       allyName,
       allCharacters,
-      allyRelationships
+      allyRelationships,
+      ruleset
     );
     combinedMembers += allyStats.totalMembers;
 

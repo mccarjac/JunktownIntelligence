@@ -38,6 +38,7 @@ import {
 } from '@models/gameData';
 import { SPECIES_BASE_STATS, Species } from '@models/speciesTypes';
 import { BaseFormScreen, CollapsibleSection } from '@/components';
+import { useLabels } from '@/ruleset';
 
 type QuestsFormNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -200,6 +201,7 @@ const DISTINCTION_OPTIONS: Option<DistinctionId>[] = AVAILABLE_DISTINCTIONS.map(
 export const QuestFormScreen: React.FC = () => {
   const navigation = useNavigation<QuestsFormNavigationProp>();
   const route = useRoute<QuestsFormRouteProp>();
+  const label = useLabels();
   const { quest } = route.params || {};
 
   const [formData, setFormData] = useState<QuestFormData>(emptyFormData());
@@ -552,32 +554,38 @@ export const QuestFormScreen: React.FC = () => {
       <CollapsibleSection title="Team Preferences" defaultCollapsed>
         <Text style={styles.sublabel}>Desirable</Text>
         <MultiSelectField
-          label="Tags"
-          placeholder="Select tag to add..."
+          label={label('traitCategory.plural')}
+          placeholder={`Select ${label(
+            'traitCategory.singular',
+            'lower'
+          )} to add...`}
           options={TAG_OPTIONS}
           selected={formData.desirable.tags}
           onAdd={value => addPreference('desirable', 'tags', value)}
           onRemove={value => removePreference('desirable', 'tags', value)}
         />
         <MultiSelectField
-          label="Species"
-          placeholder="Select species to add..."
+          label={label('archetype.plural')}
+          placeholder={`Select ${label(
+            'archetype.singular',
+            'lower'
+          )} to add...`}
           options={SPECIES_OPTIONS}
           selected={formData.desirable.species}
           onAdd={value => addPreference('desirable', 'species', value)}
           onRemove={value => removePreference('desirable', 'species', value)}
         />
         <MultiSelectField
-          label="Perks"
-          placeholder="Select perk to add..."
+          label={label('trait.plural')}
+          placeholder={`Select ${label('trait.singular', 'lower')} to add...`}
           options={PERK_OPTIONS}
           selected={formData.desirable.perkIds}
           onAdd={value => addPreference('desirable', 'perkIds', value)}
           onRemove={value => removePreference('desirable', 'perkIds', value)}
         />
         <MultiSelectField
-          label="Distinctions"
-          placeholder="Select distinction to add..."
+          label={label('quality.plural')}
+          placeholder={`Select ${label('quality.singular', 'lower')} to add...`}
           options={DISTINCTION_OPTIONS}
           selected={formData.desirable.distinctionIds}
           onAdd={value => addPreference('desirable', 'distinctionIds', value)}
@@ -588,32 +596,38 @@ export const QuestFormScreen: React.FC = () => {
 
         <Text style={[styles.sublabel, styles.labelMargin]}>Undesirable</Text>
         <MultiSelectField
-          label="Tags"
-          placeholder="Select tag to add..."
+          label={label('traitCategory.plural')}
+          placeholder={`Select ${label(
+            'traitCategory.singular',
+            'lower'
+          )} to add...`}
           options={TAG_OPTIONS}
           selected={formData.undesirable.tags}
           onAdd={value => addPreference('undesirable', 'tags', value)}
           onRemove={value => removePreference('undesirable', 'tags', value)}
         />
         <MultiSelectField
-          label="Species"
-          placeholder="Select species to add..."
+          label={label('archetype.plural')}
+          placeholder={`Select ${label(
+            'archetype.singular',
+            'lower'
+          )} to add...`}
           options={SPECIES_OPTIONS}
           selected={formData.undesirable.species}
           onAdd={value => addPreference('undesirable', 'species', value)}
           onRemove={value => removePreference('undesirable', 'species', value)}
         />
         <MultiSelectField
-          label="Perks"
-          placeholder="Select perk to add..."
+          label={label('trait.plural')}
+          placeholder={`Select ${label('trait.singular', 'lower')} to add...`}
           options={PERK_OPTIONS}
           selected={formData.undesirable.perkIds}
           onAdd={value => addPreference('undesirable', 'perkIds', value)}
           onRemove={value => removePreference('undesirable', 'perkIds', value)}
         />
         <MultiSelectField
-          label="Distinctions"
-          placeholder="Select distinction to add..."
+          label={label('quality.plural')}
+          placeholder={`Select ${label('quality.singular', 'lower')} to add...`}
           options={DISTINCTION_OPTIONS}
           selected={formData.undesirable.distinctionIds}
           onAdd={value => addPreference('undesirable', 'distinctionIds', value)}
@@ -673,7 +687,9 @@ export const QuestFormScreen: React.FC = () => {
 
       {/* Junktown office */}
       <View style={styles.section}>
-        <Text style={styles.label}>Related Junktown Office</Text>
+        <Text style={styles.label}>
+          Related {label('questSponsor.singular')}
+        </Text>
         <TextInput
           style={styles.input}
           placeholder="Office name (optional)"
