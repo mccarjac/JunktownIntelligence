@@ -11,6 +11,7 @@ import {
   factionNodeId,
   getNeighborhood,
   locationNodeId,
+  standingDistanceFactor,
 } from '@/utils/relationshipGraph';
 
 describe('buildRelationshipGraph', () => {
@@ -392,6 +393,161 @@ describe('computeGraphLayout', () => {
     expect(
       computeGraphLayout({ nodes: [], edges: [] }, { width: 100, height: 100 })
     ).toEqual([]);
+  });
+
+  it('does not throw on edges whose endpoints are missing from the node set', () => {
+    const graph = buildRelationshipGraph({
+      characters: [makeCharacter({ id: 'c-1', name: 'One' })],
+      factions: [],
+      locations: [],
+    });
+    const withDanglingEdge = {
+      nodes: [
+        ...graph.nodes,
+        {
+          id: characterNodeId('c-2'),
+          type: 'character' as const,
+          label: 'Two',
+          refId: 'c-2',
+          degree: 0,
+        },
+      ],
+      edges: [
+        {
+          id: 'dangling',
+          sourceId: characterNodeId('c-1'),
+          targetId: characterNodeId('c-ghost'),
+          kind: 'character-character' as const,
+          standing: RelationshipStanding.Ally,
+        },
+      ],
+    };
+
+    expect(() =>
+      computeGraphLayout(withDanglingEdge, { width: 400, height: 400 })
+    ).not.toThrow();
+  });
+
+  it('places positively-related pairs closer than negatively-related ones', () => {
+    const hub = makeCharacter({
+      id: 'c-hub',
+      name: 'Hub',
+      relationships: [
+        { characterName: 'Buddy', relationshipType: RelationshipStanding.Ally },
+        {
+          characterName: 'Rival',
+          relationshipType: RelationshipStanding.Enemy,
+        },
+      ],
+    });
+    const buddy = makeCharacter({ id: 'c-buddy', name: 'Buddy' });
+    const rival = makeCharacter({ id: 'c-rival', name: 'Rival' });
+    const graph = buildRelationshipGraph({
+      characters: [hub, buddy, rival],
+      factions: [],
+      locations: [],
+    });
+
+    const positions = computeGraphLayout(graph, { width: 1200, height: 1200 });
+    const positionOf = (id: string) => {
+      const position = positions.find(p => p.id === id);
+      if (!position) {
+        throw new Error(`missing position for ${id}`);
+      }
+      return position;
+    };
+    const hubPos = positionOf(characterNodeId('c-hub'));
+    const buddyPos = positionOf(characterNodeId('c-buddy'));
+    const rivalPos = positionOf(characterNodeId('c-rival'));
+
+    expect(
+      Math.hypot(buddyPos.x - hubPos.x, buddyPos.y - hubPos.y)
+    ).toBeLessThan(Math.hypot(rivalPos.x - hubPos.x, rivalPos.y - hubPos.y));
+  });
+
+  it('spreads nodes further apart with a larger spacing option', () => {
+    const characters = [
+      makeCharacter({
+        id: 'c-1',
+        name: 'One',
+        relationships: [
+          {
+            characterName: 'Two',
+            relationshipType: RelationshipStanding.Neutral,
+          },
+          {
+            characterName: 'Three',
+            relationshipType: RelationshipStanding.Neutral,
+          },
+        ],
+      }),
+      makeCharacter({ id: 'c-2', name: 'Two' }),
+      makeCharacter({ id: 'c-3', name: 'Three' }),
+    ];
+    const graph = buildRelationshipGraph({
+      characters,
+      factions: [],
+      locations: [],
+    });
+    const size = { width: 2000, height: 2000 };
+
+    const meanPairwiseDistance = (spacing: number): number => {
+      const positions = computeGraphLayout(graph, size, { spacing });
+      let total = 0;
+      let pairs = 0;
+      for (let i = 0; i < positions.length; i++) {
+        for (let j = i + 1; j < positions.length; j++) {
+          total += Math.hypot(
+            positions[i].x - positions[j].x,
+            positions[i].y - positions[j].y
+          );
+          pairs++;
+        }
+      }
+      return total / pairs;
+    };
+
+    expect(meanPairwiseDistance(2)).toBeGreaterThan(meanPairwiseDistance(1));
+  });
+});
+
+describe('standingDistanceFactor', () => {
+  it('orders factors Ally < Friend < Neutral < Hostile < Enemy', () => {
+    const factors = [
+      RelationshipStanding.Ally,
+      RelationshipStanding.Friend,
+      RelationshipStanding.Neutral,
+      RelationshipStanding.Hostile,
+      RelationshipStanding.Enemy,
+    ].map(standing => standingDistanceFactor({ standing }, 1));
+
+    const sorted = [...factors].sort((a, b) => a - b);
+    expect(factors).toEqual(sorted);
+    expect(new Set(factors).size).toBe(factors.length);
+  });
+
+  it('returns 1 for every standing when standingSpread is 0', () => {
+    Object.values(RelationshipStanding).forEach(standing => {
+      expect(standingDistanceFactor({ standing }, 0)).toBe(1);
+    });
+  });
+
+  it('lets the worse standing win when the reciprocal side disagrees', () => {
+    expect(
+      standingDistanceFactor(
+        {
+          standing: RelationshipStanding.Ally,
+          reciprocalStanding: RelationshipStanding.Enemy,
+        },
+        1
+      )
+    ).toBe(standingDistanceFactor({ standing: RelationshipStanding.Enemy }, 1));
+  });
+
+  it('never drops below the 0.4 floor, even at maximum spread', () => {
+    expect(
+      standingDistanceFactor({ standing: RelationshipStanding.Ally }, 2)
+    ).toBeGreaterThanOrEqual(0.4);
   });
 });
 

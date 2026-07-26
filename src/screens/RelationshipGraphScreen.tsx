@@ -26,6 +26,13 @@ import {
   GraphNodeType,
   PositionedNode,
 } from '@utils/relationshipGraph';
+import {
+  DEFAULT_GRAPH_PREFERENCES,
+  getGraphPreferences,
+  GraphPreferences,
+  resetGraphPreferences,
+  updateGraphPreferences,
+} from '@utils/graphPreferences';
 import { Size } from '@utils/mapCoordinates';
 import { colors, spacing, typography, borderRadius } from '@/styles/theme';
 import { commonStyles } from '@/styles/commonStyles';
@@ -35,6 +42,7 @@ import {
   GraphFilters,
   GraphInfoCard,
   GraphLegend,
+  GraphSettingsPanel,
 } from '@/components';
 
 type RelationshipGraphNavigationProp = StackNavigationProp<RootStackParamList>;
@@ -60,16 +68,25 @@ export const RelationshipGraphScreen: React.FC = () => {
   const [filters, setFilters] = useState<GraphFilters>(DEFAULT_FILTERS);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
+  const [preferences, setPreferences] = useState<GraphPreferences>(
+    DEFAULT_GRAPH_PREFERENCES
+  );
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
       await migrateFactionDescriptions();
-      const [loadedCharacters, loadedFactions, loadedLocations] =
-        await Promise.all([loadCharacters(), loadFactions(), loadLocations()]);
+      const [loadedCharacters, loadedFactions, loadedLocations, loadedPrefs] =
+        await Promise.all([
+          loadCharacters(),
+          loadFactions(),
+          loadLocations(),
+          getGraphPreferences(),
+        ]);
       setCharacters(loadedCharacters);
       setFactions(loadedFactions);
       setLocations(loadedLocations);
+      setPreferences(loadedPrefs);
     } catch {
       // Loaders resolve [] on failure; the screen just shows the empty state.
     } finally {
@@ -109,9 +126,23 @@ export const RelationshipGraphScreen: React.FC = () => {
     return getNeighborhood(fullGraph, focusedNode.id, 1);
   }, [fullGraph, focusedNode]);
 
+  // The layout runs on a virtual canvas that grows with the spacing
+  // preference; the GraphCanvas pan/zoom gestures navigate the overflow.
+  const virtualSize = useMemo<Size>(() => {
+    const spreadFactor = Math.min(3, Math.max(1, preferences.spacing));
+    return {
+      width: containerSize.width * spreadFactor,
+      height: containerSize.height * spreadFactor,
+    };
+  }, [containerSize, preferences.spacing]);
+
   const positionedNodes = useMemo(
-    () => computeGraphLayout(displayedGraph, containerSize),
-    [displayedGraph, containerSize]
+    () =>
+      computeGraphLayout(displayedGraph, virtualSize, {
+        spacing: preferences.spacing,
+        standingSpread: preferences.standingSpread,
+      }),
+    [displayedGraph, virtualSize, preferences]
   );
 
   const selectedNode: PositionedNode | null =
@@ -172,6 +203,17 @@ export const RelationshipGraphScreen: React.FC = () => {
     setFilters(prev => ({ ...prev, hideIsolated: !prev.hideIsolated }));
   };
 
+  const handlePreferencesCommit = (prefs: GraphPreferences) => {
+    setPreferences(prefs);
+    // Persistence failures are non-fatal — the in-memory value still applies.
+    updateGraphPreferences(prefs).catch(() => {});
+  };
+
+  const handlePreferencesReset = () => {
+    setPreferences(DEFAULT_GRAPH_PREFERENCES);
+    resetGraphPreferences().catch(() => {});
+  };
+
   const hasAnyData =
     characters.length > 0 || factions.length > 0 || locations.length > 0;
 
@@ -184,6 +226,12 @@ export const RelationshipGraphScreen: React.FC = () => {
         onToggleHideIsolated={handleToggleHideIsolated}
       />
       <GraphLegend />
+      <GraphSettingsPanel
+        preferences={preferences}
+        onChange={setPreferences}
+        onCommit={handlePreferencesCommit}
+        onReset={handlePreferencesReset}
+      />
 
       {focusedNode && (
         <View style={styles.focusPill}>
@@ -224,7 +272,8 @@ export const RelationshipGraphScreen: React.FC = () => {
           </View>
         ) : containerSize.width > 0 ? (
           <GraphCanvas
-            size={containerSize}
+            containerSize={containerSize}
+            contentSize={virtualSize}
             nodes={positionedNodes}
             edges={displayedGraph.edges}
             selectedNodeId={selectedNodeId}

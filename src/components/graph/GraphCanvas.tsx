@@ -13,15 +13,24 @@ import { standingEdgeColor } from './graphColors';
 import { GraphNodeMarker } from './GraphNodeMarker';
 
 interface GraphCanvasProps {
-  size: Size;
+  /** Visible viewport size. */
+  containerSize: Size;
+  /**
+   * Size of the layout canvas the nodes were positioned on. May be larger
+   * than `containerSize` (spread-out layouts); pan/zoom navigates it.
+   */
+  contentSize: Size;
   nodes: PositionedNode[];
   edges: GraphEdge[];
   selectedNodeId: string | null;
   onSelectNode: (node: PositionedNode) => void;
 }
 
+const MAX_SCALE = 3;
+
 export const GraphCanvas: React.FC<GraphCanvasProps> = ({
-  size,
+  containerSize,
+  contentSize,
   nodes,
   edges,
   selectedNodeId,
@@ -34,6 +43,17 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
   const savedTranslateX = useSharedValue(0);
   const savedTranslateY = useSharedValue(0);
 
+  // Zooming out to minScale fits the whole (possibly oversized) content in
+  // the viewport; never above 1 so a small graph isn't blown up.
+  const minScale =
+    contentSize.width > 0 && contentSize.height > 0
+      ? Math.min(
+          1,
+          containerSize.width / contentSize.width,
+          containerSize.height / contentSize.height
+        )
+      : 1;
+
   const pinchGesture = Gesture.Pinch()
     .onUpdate(e => {
       scale.value = savedScale.value * e.scale;
@@ -41,25 +61,25 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
         translateX.value,
         translateY.value,
         scale.value,
-        size,
-        size
+        contentSize,
+        containerSize
       );
       translateX.value = clamped.x;
       translateY.value = clamped.y;
     })
     .onEnd(() => {
       let targetScale = scale.value;
-      if (targetScale < 1) {
-        targetScale = 1;
-      } else if (targetScale > 3) {
-        targetScale = 3;
+      if (targetScale < minScale) {
+        targetScale = minScale;
+      } else if (targetScale > MAX_SCALE) {
+        targetScale = MAX_SCALE;
       }
       const clamped = clampTranslation(
         translateX.value,
         translateY.value,
         targetScale,
-        size,
-        size
+        contentSize,
+        containerSize
       );
       scale.value = withTiming(targetScale);
       translateX.value = withTiming(clamped.x);
@@ -75,8 +95,8 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
         savedTranslateX.value + e.translationX,
         savedTranslateY.value + e.translationY,
         scale.value,
-        size,
-        size
+        contentSize,
+        containerSize
       );
       translateX.value = clamped.x;
       translateY.value = clamped.y;
@@ -89,9 +109,10 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
   const doubleTap = Gesture.Tap()
     .numberOfTaps(2)
     .onEnd(() => {
-      if (scale.value > 1) {
-        scale.value = withTiming(1);
-        savedScale.value = 1;
+      if (scale.value > minScale) {
+        // Zoom out to fit the whole graph.
+        scale.value = withTiming(minScale);
+        savedScale.value = minScale;
         translateX.value = withTiming(0);
         translateY.value = withTiming(0);
         savedTranslateX.value = 0;
@@ -102,8 +123,8 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
           translateX.value,
           translateY.value,
           targetScale,
-          size,
-          size
+          contentSize,
+          containerSize
         );
         scale.value = withTiming(targetScale);
         savedScale.value = targetScale;
@@ -134,9 +155,12 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
         accessibilityLabel="Relationship graph canvas"
       >
         <Animated.View
-          style={[{ width: size.width, height: size.height }, animatedStyle]}
+          style={[
+            { width: contentSize.width, height: contentSize.height },
+            animatedStyle,
+          ]}
         >
-          <Svg width={size.width} height={size.height}>
+          <Svg width={contentSize.width} height={contentSize.height}>
             {edges.map(edge => {
               const source = nodes.find(n => n.id === edge.sourceId);
               const target = nodes.find(n => n.id === edge.targetId);
@@ -175,5 +199,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     overflow: 'hidden',
+    // clampTranslation's symmetric bounds assume the content is centered in
+    // the viewport (same pattern as LocationMapScreen's imageContainer);
+    // without this an oversized canvas anchors top-left and pans wrong.
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

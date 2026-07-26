@@ -1,10 +1,19 @@
 import {
+  forceCollide,
+  forceLink,
+  forceManyBody,
+  forceX,
+  forceY,
+  type SimulationLinkDatum,
+  type SimulationNodeDatum,
+} from 'd3-force';
+import {
   GameCharacter,
   GameLocation,
   RelationshipStanding,
 } from '@models/types';
 import type { StoredFaction } from '@utils/characterStorage';
-import { Point, Size } from '@utils/mapCoordinates';
+import { Size } from '@utils/mapCoordinates';
 
 /**
  * Pure, dependency-free graph model + layout for the relationship graph
@@ -281,27 +290,131 @@ export interface PositionedNode extends GraphNode {
 }
 
 export interface LayoutOptions {
-  /** Force-simulation iteration count. Default 150. */
+  /**
+   * d3-force tick count. Default 300 (roughly d3's default alpha schedule
+   * from 1 down to alphaMin).
+   */
   iterations?: number;
+  /** Kept-in-bounds margin around the layout canvas. Default 24. */
   padding?: number;
+  /**
+   * Overall spacing multiplier (>= 1). Scales link rest distances and
+   * node repulsion together. Default 1.
+   */
+  spacing?: number;
+  /**
+   * How strongly relationship standing modulates link distance, 0 (off)
+   * to 2. Default 1.
+   */
+  standingSpread?: number;
 }
 
 const TYPE_ORDER: GraphNodeType[] = ['character', 'faction', 'location'];
 
+/** Rest distance of a Neutral edge at spacing 1, in layout pixels. */
+const BASE_LINK_DISTANCE = 90;
 /**
- * Deterministic force-directed layout: nodes seed on a circle in a stable
- * (type, id) order, then repulsion/attraction/centering forces run for a
- * fixed iteration count — no randomness, so identical input always produces
- * identical positions (needed both for testability and so the graph doesn't
- * visually reshuffle on every re-render). O(nodes^2 * iterations); fine for
- * the dozens-to-low-hundreds of nodes this app's campaigns produce.
+ * Collision radius: NODE_RADIUS (16) plus the label band drawn below the
+ * circle in GraphNodeMarker — covers the label height and roughly half of a
+ * truncated 12-char label's width.
+ */
+const COLLIDE_RADIUS = 44;
+const CHARGE_STRENGTH = -160;
+const CENTER_PULL = 0.06;
+/** Arbitrary fixed seed for the layout PRNG. */
+const LAYOUT_SEED = 0x2545f491;
+
+/**
+ * Relative rest-distance adjustment per standing: negative pulls the pair
+ * closer, positive pushes it apart. The asymmetry (Enemy pushes further than
+ * Ally pulls) keeps hostile clusters visually distinct without collapsing
+ * friendly ones into each other.
+ */
+const STANDING_DISTANCE_DELTA: Record<RelationshipStanding, number> = {
+  [RelationshipStanding.Ally]: -0.35,
+  [RelationshipStanding.Friend]: -0.2,
+  [RelationshipStanding.Neutral]: 0,
+  [RelationshipStanding.Hostile]: 0.45,
+  [RelationshipStanding.Enemy]: 0.8,
+};
+
+/**
+ * Multiplier applied to an edge's rest distance. Uses the WORSE of
+ * `standing`/`reciprocalStanding` (max delta): a one-sided Ally + Hostile
+ * pair should not be drawn close — antagonism dominates. Floored at 0.4 so
+ * a large `standingSpread` can never produce a zero or negative distance.
+ */
+export function standingDistanceFactor(
+  edge: Pick<GraphEdge, 'standing' | 'reciprocalStanding'>,
+  standingSpread: number
+): number {
+  const delta = Math.max(
+    STANDING_DISTANCE_DELTA[edge.standing],
+    edge.reciprocalStanding !== undefined
+      ? STANDING_DISTANCE_DELTA[edge.reciprocalStanding]
+      : -Infinity
+  );
+  return Math.max(0.4, 1 + delta * standingSpread);
+}
+
+/**
+ * Small deterministic PRNG (mulberry32) handed to d3's `randomSource` so the
+ * simulation never falls back to `Math.random` (d3 only draws randoms to
+ * jiggle coincident nodes apart).
+ */
+const mulberry32 = (seed: number): (() => number) => {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+};
+
+interface SimNode extends SimulationNodeDatum {
+  id: string;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+}
+
+interface SimLink extends SimulationLinkDatum<SimNode> {
+  distance: number;
+}
+
+// d3-force simulation defaults (alphaMin, alphaDecay over ~300 ticks,
+// velocityDecay 0.4), mirrored here because the tick loop below runs the
+// forces directly instead of through `forceSimulation` — whose constructor
+// auto-starts an async d3-timer stepper that would leak a frame callback
+// into the app (one stray no-op frame per layout) and crash Jest teardown.
+const ALPHA_MIN = 0.001;
+const ALPHA_DECAY = 1 - Math.pow(ALPHA_MIN, 1 / 300);
+const VELOCITY_RETAIN = 0.6;
+
+/**
+ * Deterministic force-directed layout on d3-force: nodes seed on a circle in
+ * a stable (type, id) order, then a fixed number of synchronous ticks run
+ * with a seeded `randomSource` — identical input always produces identical
+ * positions (needed both for testability and so the graph doesn't visually
+ * reshuffle on every re-render). Edge rest distances are standing-aware
+ * (Ally/Friend shorter, Hostile/Enemy longer — see `standingDistanceFactor`)
+ * and scale with `spacing`. `size` is the layout canvas, which callers may
+ * make larger than the visible viewport; positions are clamped inside it.
  */
 export function computeGraphLayout(
   graph: RelationshipGraph,
   size: Size,
   options: LayoutOptions = {}
 ): PositionedNode[] {
-  const { iterations = 150, padding = 24 } = options;
+  const {
+    iterations = 300,
+    padding = 24,
+    spacing = 1,
+    standingSpread = 1,
+  } = options;
   const { nodes, edges } = graph;
   const count = nodes.length;
   if (count === 0) {
@@ -319,92 +432,80 @@ export function computeGraphLayout(
     return typeDiff !== 0 ? typeDiff : a.id.localeCompare(b.id);
   });
 
-  const positions = new Map<string, Point>();
-  ordered.forEach((node, index) => {
-    const angle = (2 * Math.PI * index) / count;
-    positions.set(node.id, {
-      x: centerX + startRadius * Math.cos(angle),
-      y: centerY + startRadius * Math.sin(angle),
-    });
-  });
-
   if (count === 1) {
     const only = ordered[0];
     return [{ ...only, x: centerX, y: centerY }];
   }
 
-  const REPULSION = (width * height) / count / 4;
-  const ATTRACTION = 0.02;
-  const CENTERING = 0.01;
+  // d3 mutates its node objects (x/y/vx/vy) — build copies, never hand it
+  // the caller's GraphNodes. `index` is normally assigned by forceSimulation
+  // and is required by the force accessors, so set it here.
+  const simNodes: SimNode[] = ordered.map((node, index) => {
+    const angle = (2 * Math.PI * index) / count;
+    return {
+      id: node.id,
+      index,
+      x: centerX + startRadius * Math.cos(angle),
+      y: centerY + startRadius * Math.sin(angle),
+      vx: 0,
+      vy: 0,
+    };
+  });
 
-  for (let iter = 0; iter < iterations; iter++) {
-    const forces = new Map<string, Point>();
-    ordered.forEach(node => forces.set(node.id, { x: 0, y: 0 }));
+  // forceLink throws on ids missing from the node set; subgraphs (e.g. from
+  // getNeighborhood) may carry edges to omitted endpoints, so filter first.
+  const nodeIds = new Set(ordered.map(node => node.id));
+  const links: SimLink[] = edges
+    .filter(edge => nodeIds.has(edge.sourceId) && nodeIds.has(edge.targetId))
+    .map(edge => ({
+      source: edge.sourceId,
+      target: edge.targetId,
+      distance:
+        BASE_LINK_DISTANCE *
+        spacing *
+        standingDistanceFactor(edge, standingSpread),
+    }));
 
-    for (let i = 0; i < ordered.length; i++) {
-      for (let j = i + 1; j < ordered.length; j++) {
-        const nodeA = ordered[i];
-        const nodeB = ordered[j];
-        const posA = positions.get(nodeA.id) as Point;
-        const posB = positions.get(nodeB.id) as Point;
-        let dx = posA.x - posB.x;
-        let dy = posA.y - posB.y;
-        let distSq = dx * dx + dy * dy;
-        if (distSq < 0.01) {
-          // Deterministic jitter for coincident points, seeded by index.
-          dx = Math.cos(i - j);
-          dy = Math.sin(i - j);
-          distSq = 0.01;
-        }
-        const dist = Math.sqrt(distSq);
-        const force = REPULSION / distSq;
-        const fx = (dx / dist) * force;
-        const fy = (dy / dist) * force;
-        const forceA = forces.get(nodeA.id) as Point;
-        const forceB = forces.get(nodeB.id) as Point;
-        forceA.x += fx;
-        forceA.y += fy;
-        forceB.x -= fx;
-        forceB.y -= fy;
-      }
-    }
+  const forces = [
+    forceLink<SimNode, SimLink>(links)
+      .id(node => node.id)
+      .distance(link => link.distance),
+    forceManyBody<SimNode>()
+      .strength(CHARGE_STRENGTH * spacing)
+      // Without a range cap, disconnected components repel each other all
+      // the way to the canvas edges.
+      .distanceMax(Math.min(width, height) / 2),
+    forceCollide<SimNode>(COLLIDE_RADIUS).iterations(2),
+    // forceX/forceY rather than forceCenter: forceCenter only translates the
+    // mean position and lets stray nodes sit far outside the canvas.
+    forceX<SimNode>(centerX).strength(CENTER_PULL),
+    forceY<SimNode>(centerY).strength(CENTER_PULL),
+  ];
 
-    edges.forEach(edge => {
-      const posA = positions.get(edge.sourceId);
-      const posB = positions.get(edge.targetId);
-      const forceA = forces.get(edge.sourceId);
-      const forceB = forces.get(edge.targetId);
-      if (!posA || !posB || !forceA || !forceB) {
-        // Guards subgraphs (e.g. from getNeighborhood) that may omit an
-        // endpoint; shouldn't happen for a full graph.
-        return;
-      }
-      const dx = posB.x - posA.x;
-      const dy = posB.y - posA.y;
-      const fx = dx * ATTRACTION;
-      const fy = dy * ATTRACTION;
-      forceA.x += fx;
-      forceA.y += fy;
-      forceB.x -= fx;
-      forceB.y -= fy;
-    });
+  const random = mulberry32(LAYOUT_SEED);
+  forces.forEach(force => force.initialize?.(simNodes, random));
 
-    ordered.forEach(node => {
-      const pos = positions.get(node.id) as Point;
-      const force = forces.get(node.id) as Point;
-      force.x += (centerX - pos.x) * CENTERING;
-      force.y += (centerY - pos.y) * CENTERING;
-      positions.set(node.id, {
-        x: Math.min(width - padding, Math.max(padding, pos.x + force.x)),
-        y: Math.min(height - padding, Math.max(padding, pos.y + force.y)),
-      });
+  let alpha = 1;
+  for (let i = 0; i < iterations; i++) {
+    alpha += (0 - alpha) * ALPHA_DECAY;
+    forces.forEach(force => force(alpha));
+    simNodes.forEach(node => {
+      node.vx *= VELOCITY_RETAIN;
+      node.vy *= VELOCITY_RETAIN;
+      node.x += node.vx;
+      node.y += node.vy;
     });
   }
 
-  return ordered.map(node => ({
-    ...node,
-    ...(positions.get(node.id) as Point),
-  }));
+  const simById = new Map(simNodes.map(node => [node.id, node]));
+  return ordered.map(node => {
+    const sim = simById.get(node.id) as SimNode;
+    return {
+      ...node,
+      x: Math.min(width - padding, Math.max(padding, sim.x)),
+      y: Math.min(height - padding, Math.max(padding, sim.y)),
+    };
+  });
 }
 
 /**

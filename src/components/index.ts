@@ -20,3 +20,4 @@ export { GraphFilterBar } from './graph/GraphFilterBar';
 export type { GraphFilters } from './graph/GraphFilterBar';
 export { GraphLegend } from './graph/GraphLegend';
 export { GraphInfoCard } from './graph/GraphInfoCard';
+export { GraphSettingsPanel } from './graph/GraphSettingsPanel';

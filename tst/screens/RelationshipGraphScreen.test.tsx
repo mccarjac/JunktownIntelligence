@@ -15,6 +15,18 @@ import {
 } from '../helpers/navigation';
 
 jest.mock('@utils/characterStorage');
+jest.mock('@utils/graphPreferences', () => ({
+  ...jest.requireActual('@utils/graphPreferences'),
+  getGraphPreferences: jest.fn(),
+  updateGraphPreferences: jest.fn(),
+  resetGraphPreferences: jest.fn(),
+}));
+
+import {
+  DEFAULT_GRAPH_PREFERENCES,
+  getGraphPreferences,
+  updateGraphPreferences,
+} from '@utils/graphPreferences';
 
 const storage = getStorageMock();
 
@@ -36,6 +48,12 @@ describe('RelationshipGraphScreen', () => {
     jest.clearAllMocks();
     primeStorageDefaults();
     installFocusEffectOnce();
+    (getGraphPreferences as jest.Mock).mockResolvedValue(
+      DEFAULT_GRAPH_PREFERENCES
+    );
+    (updateGraphPreferences as jest.Mock).mockResolvedValue(
+      DEFAULT_GRAPH_PREFERENCES
+    );
   });
 
   afterEach(() => {
@@ -204,6 +222,25 @@ describe('RelationshipGraphScreen', () => {
     fireEvent.press(getByLabelText('Faction'));
 
     await waitFor(() => expect(queryByLabelText('Brotherhood')).toBeNull());
+    expect(getByLabelText('Alice')).toBeTruthy();
+  });
+
+  it('persists spacing changes from the layout settings panel', async () => {
+    const alice = makeCharacter({ id: 'c-alice', name: 'Alice' });
+    storage.loadCharacters.mockResolvedValue([alice]);
+
+    const { getByTestId, getByLabelText } = render(<RelationshipGraphScreen />);
+    fireCanvasLayout(getByTestId);
+    await waitFor(() => expect(getByLabelText('Alice')).toBeTruthy());
+
+    fireEvent.press(getByLabelText('Layout settings'));
+    fireEvent(getByTestId('graph-spacing-slider'), 'slidingComplete', 2.5);
+
+    expect(updateGraphPreferences).toHaveBeenCalledWith({
+      ...DEFAULT_GRAPH_PREFERENCES,
+      spacing: 2.5,
+    });
+    // The graph still renders after the relayout on the larger canvas.
     expect(getByLabelText('Alice')).toBeTruthy();
   });
 });

@@ -129,7 +129,22 @@ Path aliases (tsconfig + babel-plugin-module-resolver): `@/*` → `src/*`, plus
   only backfills factions that had a non-empty embedded description. This
   screen is the first direct `react-native-svg` consumer in `src/`; it
   renders under Jest without any mock (`Circle`/`G` support `onPress` and
-  `accessibilityLabel` directly).
+  `accessibilityLabel` directly). Layout (`computeGraphLayout`) runs d3-force
+  forces through a manual synchronous tick loop — deliberately NOT
+  `forceSimulation()`, whose constructor auto-starts an async d3-timer
+  stepper that leaks a frame callback into Jest teardown. Determinism is a
+  documented, tested contract: circle-seeded positions in stable (type, id)
+  order plus a seeded PRNG passed to each force's `initialize`. Edge rest
+  distances are standing-aware (`standingDistanceFactor`: Ally/Friend
+  shorter, Hostile/Enemy longer; the worse side of a disputed relationship
+  wins). User-tunable spacing lives in `src/utils/graphPreferences.ts`
+  (key `gameCharacterManager_graph_prefs`), edited via sliders in
+  `GraphSettingsPanel` (`@react-native-community/slider`); the screen lays
+  out on a virtual canvas up to 3x the viewport that `GraphCanvas` pans and
+  zooms (`contentSize` vs `containerSize` — content must stay centered for
+  `clampTranslation`'s symmetric bounds to hold). The d3 packages and
+  `@react-native-community` are allow-listed in `jest.config.js`'s
+  `transformIgnorePatterns` (ESM-only, like `uuid`).
 
 ## Testing
 
