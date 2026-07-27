@@ -40,7 +40,8 @@ export type TagBonusConfig = {
   [key in PerkTag]: TagScoreBonus[];
 };
 
-// TODO : Populate with actual tag score bonuses
+// TODO (#116): placeholder values, not sourced from the actual rulebook.
+// Needs real health/limit bonuses per tag threshold from the maintainer.
 export const TAG_SCORE_BONUSES: TagBonusConfig = {
   Agility: [
     { requiredScore: 3, limit: 1 },
@@ -106,7 +107,8 @@ export const TAG_SCORE_BONUSES: TagBonusConfig = {
 
 export type RecipeId = (typeof AVAILABLE_RECIPES)[number]['id'];
 
-// TODO : Populate with actual recipes
+// TODO (#116): placeholder entries (r1-r4), not the real crafting recipe list.
+// Needs the actual recipes and their material requirements from the maintainer.
 export const AVAILABLE_RECIPES: Recipe[] = [
   {
     id: 'r1',
@@ -154,7 +156,9 @@ export interface Perk {
   recipeIds?: RecipeId[];
 }
 
-// TODO : Populate with actual perks
+// TODO (#116): perk names/tags/species gates are real, but every `description`
+// is empty and `statModifiers`/`recipeIds` are mostly unset. Needs the actual
+// perk text and effects from the maintainer.
 export const AVAILABLE_PERKS: Perk[] = [
   // Agility Perks
   {
