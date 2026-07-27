@@ -1,0 +1,6 @@
+{
+  "model": "opusplan",
+  "permissions": {
+    "defaultMode": "plan"
+  }
+}
