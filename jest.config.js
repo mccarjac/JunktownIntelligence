@@ -8,8 +8,12 @@ module.exports = {
   // gitIntegration.ts that were previously excluded from the report.
   // `uuid` ships ESM-only and must be transformed so test files can automock
   // modules that import it (e.g. `jest.mock('@utils/characterStorage')`).
+  // `d3-force` and its transitive deps (`d3-quadtree`, `d3-dispatch`,
+  // `d3-timer`) are ESM-only too. `@react-native-community` needs its own
+  // entry: the `@react-native` alternative requires a `/` right after it, so
+  // it does not match `@react-native-community/slider`.
   transformIgnorePatterns: [
-    'node_modules/(?!(react-native|@react-native|@react-navigation|expo|expo-.*|@expo|@unimodules|@octokit|react-native-.*|uuid)/)',
+    'node_modules/(?!(react-native|@react-native|@react-native-community|@react-navigation|expo|expo-.*|@expo|@unimodules|@octokit|react-native-.*|uuid|d3-force|d3-quadtree|d3-dispatch|d3-timer)/)',
   ],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
   moduleNameMapper: {

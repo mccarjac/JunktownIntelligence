@@ -114,6 +114,7 @@ jest.mock('react-native-gesture-handler', () => {
       Tap: jest.fn(createGestureStub),
       LongPress: jest.fn(createGestureStub),
       Simultaneous: jest.fn((...gestures) => gestures),
+      Exclusive: jest.fn((...gestures) => gestures),
     },
     TouchableOpacity: 'TouchableOpacity',
     ScrollView: 'ScrollView',

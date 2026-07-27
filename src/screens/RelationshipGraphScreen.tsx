@@ -26,6 +26,13 @@ import {
   GraphNodeType,
   PositionedNode,
 } from '@utils/relationshipGraph';
+import {
+  DEFAULT_GRAPH_PREFERENCES,
+  getGraphPreferences,
+  GraphPreferences,
+  resetGraphPreferences,
+  updateGraphPreferences,
+} from '@utils/graphPreferences';
 import { Size } from '@utils/mapCoordinates';
 import { colors, spacing, typography, borderRadius } from '@/styles/theme';
 import { commonStyles } from '@/styles/commonStyles';
@@ -35,15 +42,16 @@ import {
   GraphFilters,
   GraphInfoCard,
   GraphLegend,
+  GraphSettingsPanel,
 } from '@/components';
 
 type RelationshipGraphNavigationProp = StackNavigationProp<RootStackParamList>;
 
-const DEFAULT_FILTERS: GraphFilters = {
-  visibleTypes: new Set<GraphNodeType>(['character', 'faction', 'location']),
-  showRetired: false,
-  hideIsolated: false,
-};
+const DEFAULT_VISIBLE_TYPES = new Set<GraphNodeType>([
+  'character',
+  'faction',
+  'location',
+]);
 
 export const RelationshipGraphScreen: React.FC = () => {
   const navigation = useNavigation<RelationshipGraphNavigationProp>();
@@ -57,19 +65,41 @@ export const RelationshipGraphScreen: React.FC = () => {
     width: 0,
     height: 0,
   });
-  const [filters, setFilters] = useState<GraphFilters>(DEFAULT_FILTERS);
+  const [visibleTypes, setVisibleTypes] = useState<Set<GraphNodeType>>(
+    DEFAULT_VISIBLE_TYPES
+  );
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
+  // Single source of truth for everything persisted: layout spacing sliders
+  // plus the retired/isolated filter toggles.
+  const [preferences, setPreferences] = useState<GraphPreferences>(
+    DEFAULT_GRAPH_PREFERENCES
+  );
+
+  const filters: GraphFilters = useMemo(
+    () => ({
+      visibleTypes,
+      showRetired: preferences.showRetired,
+      hideIsolated: preferences.hideIsolated,
+    }),
+    [visibleTypes, preferences.showRetired, preferences.hideIsolated]
+  );
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
       await migrateFactionDescriptions();
-      const [loadedCharacters, loadedFactions, loadedLocations] =
-        await Promise.all([loadCharacters(), loadFactions(), loadLocations()]);
+      const [loadedCharacters, loadedFactions, loadedLocations, loadedPrefs] =
+        await Promise.all([
+          loadCharacters(),
+          loadFactions(),
+          loadLocations(),
+          getGraphPreferences(),
+        ]);
       setCharacters(loadedCharacters);
       setFactions(loadedFactions);
       setLocations(loadedLocations);
+      setPreferences(loadedPrefs);
     } catch {
       // Loaders resolve [] on failure; the screen just shows the empty state.
     } finally {
@@ -109,10 +139,26 @@ export const RelationshipGraphScreen: React.FC = () => {
     return getNeighborhood(fullGraph, focusedNode.id, 1);
   }, [fullGraph, focusedNode]);
 
-  const positionedNodes = useMemo(
-    () => computeGraphLayout(displayedGraph, containerSize),
-    [displayedGraph, containerSize]
+  // The reference frame for the simulation grows with the spacing
+  // preference; the layout itself is an infinite canvas — it returns its
+  // natural content size and GraphCanvas pan/zoom navigates the overflow.
+  const referenceFrame = useMemo<Size>(() => {
+    const spreadFactor = Math.min(3, Math.max(1, preferences.spacing));
+    return {
+      width: containerSize.width * spreadFactor,
+      height: containerSize.height * spreadFactor,
+    };
+  }, [containerSize, preferences.spacing]);
+
+  const graphLayout = useMemo(
+    () =>
+      computeGraphLayout(displayedGraph, referenceFrame, {
+        spacing: preferences.spacing,
+        standingSpread: preferences.standingSpread,
+      }),
+    [displayedGraph, referenceFrame, preferences]
   );
+  const positionedNodes = graphLayout.nodes;
 
   const selectedNode: PositionedNode | null =
     positionedNodes.find(n => n.id === selectedNodeId) ?? null;
@@ -122,7 +168,9 @@ export const RelationshipGraphScreen: React.FC = () => {
     setContainerSize({ width, height });
   };
 
-  const handleSelectNode = (node: PositionedNode) => {
+  // Tap navigates straight to the entity; long-press opens the info card
+  // (which still offers Focus and View details).
+  const handleLongPressNode = (node: PositionedNode) => {
     setSelectedNodeId(prev => (prev === node.id ? null : node.id));
   };
 
@@ -153,23 +201,38 @@ export const RelationshipGraphScreen: React.FC = () => {
   };
 
   const handleToggleType = (type: GraphNodeType) => {
-    setFilters(prev => {
-      const visibleTypes = new Set(prev.visibleTypes);
-      if (visibleTypes.has(type)) {
-        visibleTypes.delete(type);
+    setVisibleTypes(prev => {
+      const next = new Set(prev);
+      if (next.has(type)) {
+        next.delete(type);
       } else {
-        visibleTypes.add(type);
+        next.add(type);
       }
-      return { ...prev, visibleTypes };
+      return next;
     });
   };
 
   const handleToggleRetired = () => {
-    setFilters(prev => ({ ...prev, showRetired: !prev.showRetired }));
+    const showRetired = !preferences.showRetired;
+    setPreferences(prev => ({ ...prev, showRetired }));
+    // Persistence failures are non-fatal — the in-memory value still applies.
+    updateGraphPreferences({ showRetired }).catch(() => {});
   };
 
   const handleToggleHideIsolated = () => {
-    setFilters(prev => ({ ...prev, hideIsolated: !prev.hideIsolated }));
+    const hideIsolated = !preferences.hideIsolated;
+    setPreferences(prev => ({ ...prev, hideIsolated }));
+    updateGraphPreferences({ hideIsolated }).catch(() => {});
+  };
+
+  const handlePreferencesCommit = (prefs: GraphPreferences) => {
+    setPreferences(prefs);
+    updateGraphPreferences(prefs).catch(() => {});
+  };
+
+  const handlePreferencesReset = () => {
+    setPreferences(DEFAULT_GRAPH_PREFERENCES);
+    resetGraphPreferences().catch(() => {});
   };
 
   const hasAnyData =
@@ -184,6 +247,12 @@ export const RelationshipGraphScreen: React.FC = () => {
         onToggleHideIsolated={handleToggleHideIsolated}
       />
       <GraphLegend />
+      <GraphSettingsPanel
+        preferences={preferences}
+        onChange={setPreferences}
+        onCommit={handlePreferencesCommit}
+        onReset={handlePreferencesReset}
+      />
 
       {focusedNode && (
         <View style={styles.focusPill}>
@@ -224,11 +293,13 @@ export const RelationshipGraphScreen: React.FC = () => {
           </View>
         ) : containerSize.width > 0 ? (
           <GraphCanvas
-            size={containerSize}
+            containerSize={containerSize}
+            contentSize={graphLayout.size}
             nodes={positionedNodes}
             edges={displayedGraph.edges}
             selectedNodeId={selectedNodeId}
-            onSelectNode={handleSelectNode}
+            onPressNode={handleViewDetails}
+            onLongPressNode={handleLongPressNode}
           />
         ) : null}
       </View>
