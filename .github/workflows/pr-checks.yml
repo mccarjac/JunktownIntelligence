@@ -23,6 +23,13 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      - name: Use HTTPS for the git dependency
+        # `lore` is a git dependency. npm normalizes the GitHub shorthand to
+        # `git+ssh://` in the lockfile, and a runner has no SSH key — pacote
+        # usually falls back to HTTPS for a public repo, but this makes it
+        # deterministic rather than relying on that fallback.
+        run: git config --global url."https://github.com/".insteadOf ssh://git@github.com/
+
       - name: Install dependencies
         run: npm ci
 
