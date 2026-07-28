@@ -9,10 +9,16 @@ if (typeof global.process === 'undefined') {
 }
 
 import { registerRootComponent } from 'expo';
+import { configureLore } from 'lore';
 
+import { afterworldsRuleset } from './src/rulesets/afterworlds';
+import { afterworldsAssets } from './src/rulesets/afterworlds/assets';
 import App from './App';
 
-// registerRootComponent calls AppRegistry.registerComponent('main', () => App);
-// It also ensures that whether you load the app in Expo Go or in a native build,
-// the environment is set up appropriately
+// Before registerRootComponent, and before anything can touch storage: the
+// engine's field migration normalizes stored data against the *ruleset's*
+// attribute table, so running it with the engine's default would rewrite real
+// Junktown characters against the wrong one.
+configureLore({ ruleset: afterworldsRuleset, assets: afterworldsAssets });
+
 registerRootComponent(App);
