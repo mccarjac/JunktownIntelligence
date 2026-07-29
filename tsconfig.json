@@ -2,14 +2,9 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["src/*"],
-      "@components/*": ["src/components/*"],
-      "@screens/*": ["src/screens/*"],
-      "@models/*": ["src/models/*"],
-      "@utils/*": ["src/utils/*"]
-    }
+    // `app.config.ts` is resolved by Expo outside Metro; it imports nothing
+    // local, so no path aliases are needed anywhere in this project.
+    "jsx": "react-jsx"
   },
   "include": ["**/*.ts", "**/*.tsx"],
   "exclude": ["node_modules"]
