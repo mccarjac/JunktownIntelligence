@@ -78,7 +78,7 @@ describe('afterworldsRuleset', () => {
   });
 
   it('enables every feature — Junktown uses all of them', () => {
-    expect(Object.values(afterworldsRuleset.features)).toHaveLength(8);
+    expect(Object.values(afterworldsRuleset.features)).toHaveLength(7);
     Object.values(afterworldsRuleset.features).forEach(enabled => {
       expect(enabled).toBe(true);
     });
