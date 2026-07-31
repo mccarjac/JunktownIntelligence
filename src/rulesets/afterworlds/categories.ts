@@ -1,4 +1,4 @@
-import type { TraitCategory } from 'lore/ruleset';
+import type { FacetCategory } from 'lore/ruleset';
 import { PerkTag } from './content/gameData';
 
 /**
@@ -21,6 +21,6 @@ const CATEGORY_COLORS: Record<string, string> = {
   [PerkTag.Technical]: '#607D8B',
 };
 
-export const afterworldsTraitCategories: TraitCategory[] = Object.values(
+export const afterworldsTraitCategories: FacetCategory[] = Object.values(
   PerkTag
 ).map(tag => ({ id: tag, label: tag, color: CATEGORY_COLORS[tag] }));
