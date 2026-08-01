@@ -86,10 +86,19 @@ describe('afterworldsRuleset', () => {
   });
 
   it('enables every feature — Junktown uses all of them', () => {
-    expect(Object.values(afterworldsRuleset.features)).toHaveLength(7);
+    expect(Object.values(afterworldsRuleset.features)).toHaveLength(3);
     Object.values(afterworldsRuleset.features).forEach(enabled => {
       expect(enabled).toBe(true);
     });
+  });
+
+  it('enables every report — Junktown uses all of them', () => {
+    expect(afterworldsRuleset.reports.map(r => r.kind)).toEqual([
+      'influenceReport',
+      'relationshipGraph',
+      'characterStats',
+      'factionStats',
+    ]);
   });
 
   it.each([

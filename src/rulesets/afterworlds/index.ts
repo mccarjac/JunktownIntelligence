@@ -22,6 +22,9 @@ import {
   type FacetEntry,
   type FacetBonusRule,
   type Modifier,
+  type RelationshipTypeCollection,
+  type RelationshipTypeEntry,
+  type ReportDefinition,
 } from 'lore/ruleset';
 import { afterworldsTerminology } from './terminology';
 import { afterworldsTraitCategories } from './categories';
@@ -261,6 +264,26 @@ const modifications: FacetCollection = {
   entries: [],
 };
 
+/**
+ * The old builtin `GameCharacter.present` boolean (#56), reproduced as a
+ * `single` collection so out-of-the-box behavior — a new character starting
+ * absent, presence editable per character — is unchanged from before
+ * attendance was ruleset-declared. No custom terminology: this app never
+ * overrode it.
+ */
+const attendance: FacetCollection = {
+  id: 'attendance',
+  singular: 'Attendance',
+  plural: 'Attendance',
+  selection: 'single',
+  defaultEntryId: 'absent',
+  legacyField: 'present',
+  entries: [
+    { id: 'present', label: 'Present', legacyValue: true },
+    { id: 'absent', label: 'Absent', legacyValue: false },
+  ],
+};
+
 /** The old `recipes` collection: a catalog, only ever reached via `links`. */
 const recipes: FacetCollection = {
   id: 'recipes',
@@ -275,22 +298,91 @@ const recipes: FacetCollection = {
   })),
 };
 
+/**
+ * The old `RelationshipStanding` enum (#50), reproduced as one entry list
+ * shared by all three legacy pairs so out-of-the-box behavior — values,
+ * polarity, and default color — is unchanged from before relationship types
+ * were ruleset-declared. No custom terminology: this app never overrode it.
+ */
+const STANDING_ENTRIES: RelationshipTypeEntry[] = [
+  { id: 'ally', label: 'Ally', role: 'positive', legacyValue: 'Ally' },
+  { id: 'friend', label: 'Friend', role: 'positive', legacyValue: 'Friend' },
+  {
+    id: 'neutral',
+    label: 'Neutral',
+    role: 'neutral',
+    legacyValue: 'Neutral',
+  },
+  {
+    id: 'hostile',
+    label: 'Hostile',
+    role: 'negative',
+    legacyValue: 'Hostile',
+  },
+  { id: 'enemy', label: 'Enemy', role: 'negative', legacyValue: 'Enemy' },
+];
+
+const characterStanding: RelationshipTypeCollection = {
+  id: 'characterStanding',
+  singular: 'Relationship',
+  plural: 'Relationships',
+  appliesTo: ['character', 'character'],
+  legacyField: 'characterStanding',
+  defaultEntryId: 'neutral',
+  entries: STANDING_ENTRIES,
+};
+
+const characterFactionStanding: RelationshipTypeCollection = {
+  id: 'characterFactionStanding',
+  singular: 'Standing',
+  plural: 'Standings',
+  appliesTo: ['character', 'faction'],
+  legacyField: 'characterFactionStanding',
+  defaultEntryId: 'neutral',
+  entries: STANDING_ENTRIES,
+};
+
+const factionStanding: RelationshipTypeCollection = {
+  id: 'factionStanding',
+  singular: 'Relationship',
+  plural: 'Relationships',
+  appliesTo: ['faction', 'faction'],
+  legacyField: 'factionStanding',
+  defaultEntryId: 'neutral',
+  entries: STANDING_ENTRIES,
+};
+
+/**
+ * The old fixed `FeatureFlags` booleans (`influenceReport`,
+ * `relationshipGraph`, `characterStats`, `factionStats`) generalized into a
+ * ruleset-ordered list (#56-#58). All four were on before; keeping all four,
+ * in the same order, preserves the drawer as players know it.
+ */
+const reports: ReportDefinition[] = [
+  { kind: 'influenceReport' },
+  { kind: 'relationshipGraph' },
+  { kind: 'characterStats' },
+  { kind: 'factionStats' },
+];
+
 export const afterworldsRuleset: RulesetDefinition = {
   id: 'afterworlds',
   name: 'Junktown Intelligence',
   version: '1.0.0',
   terminology: afterworldsTerminology,
   attributes,
-  facets: [archetypes, traits, qualities, modifications, recipes],
+  facets: [archetypes, traits, qualities, modifications, attendance, recipes],
+  relationshipTypes: [
+    characterStanding,
+    characterFactionStanding,
+    factionStanding,
+  ],
   features: {
     quests: true,
     discord: true,
     map: true,
-    influenceReport: true,
-    relationshipGraph: true,
-    characterStats: true,
-    factionStats: true,
   },
+  reports,
   map: { imageKey: 'map' },
   branding: { appName: APP_NAME },
 };
