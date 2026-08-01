@@ -1,10 +1,12 @@
 /**
- * Parity guard for the Phase 1 data-model generalization (issues #3-#7).
+ * Parity guard for the Phase 1 data-model generalization (issues #3-#7) and
+ * the facet-collection generalization (Lore #51).
  *
  * `DERIVED_STATS_BASELINE` was captured from the pre-generalization
  * implementation. Every rename commit and, most importantly, the data-driven
- * rewrite in #6 must keep these numbers identical for the Afterworlds
- * ruleset — if a case here moves, user-visible stat numbers moved with it.
+ * rewrite in #6 and the facet-collection rewrite in #51 must keep these
+ * numbers identical for the Afterworlds ruleset — if a case here moves,
+ * user-visible stat numbers moved with it.
  */
 import {
   AVAILABLE_PERKS,
@@ -16,7 +18,7 @@ import {
 } from '../../src/rulesets/afterworlds/content/speciesTypes';
 import {
   calculateDerivedStats,
-  type Modification,
+  type AuthoredFacetEntry,
   type GameCharacter,
 } from 'lore/ruleset';
 import { afterworldsRuleset } from '../../src/rulesets/afterworlds';
@@ -27,17 +29,19 @@ const TS = '2026-01-01T00:00:00.000Z';
 const make = (
   archetypeId: Species,
   traitIds: string[],
-  modifications?: Modification[]
+  modifications?: AuthoredFacetEntry[]
 ): GameCharacter =>
   ({
     id: 'c',
     name: 'c',
-    archetypeId,
-    traitIds,
-    qualityIds: [],
+    facets: {
+      archetypes: [archetypeId],
+      traits: traitIds,
+      qualities: [],
+      modifications: modifications ?? [],
+    },
     factions: [],
     relationships: [],
-    modifications,
     createdAt: TS,
     updatedAt: TS,
   }) as GameCharacter;
@@ -50,7 +54,7 @@ const openPerksByTag = (tag: PerkTag, n: number): string[] =>
 
 const MUTANT_RESTRICTED = ['agility_15', 'charisma_17'];
 
-const CAP_CYBERWARE: Modification[] = [
+const CAP_CYBERWARE: AuthoredFacetEntry[] = [
   {
     name: 'Reinforced Frame',
     description: '',
@@ -58,7 +62,7 @@ const CAP_CYBERWARE: Modification[] = [
       attributeDeltas: { health: 5, limit: 5, healthCap: 3, limitCap: 2 },
     },
   },
-] as Modification[];
+];
 
 /** The full case matrix, keyed to match the baseline fixture. */
 export const buildParityCases = (): Record<string, GameCharacter> => {
@@ -98,13 +102,17 @@ export const buildParityCases = (): Record<string, GameCharacter> => {
     openPerksByTag(PerkTag.Endurance, 10)
   );
 
-  cases['cyberTags:Human'] = make('Human', [], [
-    {
-      name: 'Targeting Suite',
-      description: '',
-      modifier: { categoryDeltas: { [PerkTag.Agility]: 3 } },
-    },
-  ] as Modification[]);
+  cases['cyberTags:Human'] = make(
+    'Human',
+    [],
+    [
+      {
+        name: 'Targeting Suite',
+        description: '',
+        modifier: { categoryDeltas: { traits: { [PerkTag.Agility]: 3 } } },
+      },
+    ]
+  );
 
   return cases;
 };
@@ -126,9 +134,10 @@ describe('derived stats — Afterworlds parity', () => {
       // The old shape's maxHealth/maxLimit are now resource ids.
       expect(stats.values.health).toBe(expected.maxHealth);
       expect(stats.values.limit).toBe(expected.maxLimit);
-      expect(Object.fromEntries(stats.categoryScores)).toEqual(
-        expected.tagScores
-      );
+      // categoryScores is now keyed by facet collection id; Afterworlds has
+      // exactly one scored collection ('traits'), so the old flat tagScores
+      // map lives at categoryScores.traits.
+      expect(stats.categoryScores.traits ?? {}).toEqual(expected.tagScores);
     });
   });
 });

@@ -18,10 +18,9 @@ import {
   num,
   type AttributeDefinition,
   type RulesetDefinition,
-  type Archetype,
-  type Trait,
-  type Quality,
-  type CategoryBonusRule,
+  type FacetCollection,
+  type FacetEntry,
+  type FacetBonusRule,
   type Modifier,
 } from 'lore/ruleset';
 import { afterworldsTerminology } from './terminology';
@@ -52,10 +51,10 @@ const groupsFor = (species: Species): string[] =>
  * Expressed declaratively so a ruleset with different archetypes/groups can
  * express (or omit) the same carve-out without touching derived-stats logic.
  */
-const PERFECT_MUTANT_RULE: RulesetDefinition['archetypeRules'] = [
+const PERFECT_MUTANT_RULE: NonNullable<FacetCollection['scoreExclusions']> = [
   {
-    archetypeId: 'Perfect Mutant',
-    kind: 'excludeCategoryScoreFromGroupRestrictedTraits',
+    whenCollectionId: 'archetypes',
+    whenEntryId: 'Perfect Mutant',
     groupId: 'mutant',
   },
 ];
@@ -106,7 +105,7 @@ const attributes: AttributeDefinition[] = [
   },
 ];
 
-const archetypes: Archetype[] = Object.entries(SPECIES_BASE_STATS).map(
+const archetypeEntries: FacetEntry[] = Object.entries(SPECIES_BASE_STATS).map(
   ([id, stats]) => ({
     id,
     label: id,
@@ -123,6 +122,24 @@ const archetypes: Archetype[] = Object.entries(SPECIES_BASE_STATS).map(
     },
   })
 );
+
+/** The old `archetypes` collection: single-select, seeds base attributes. */
+const archetypes: FacetCollection = {
+  id: 'archetypes',
+  singular: 'Species',
+  plural: 'Species',
+  selection: 'single',
+  defaultEntryId: 'Human',
+  legacyField: 'archetypeId',
+  groups: [
+    { id: 'organic', label: 'Organic' },
+    { id: 'robotic', label: 'Robotic' },
+    { id: 'mutant', label: 'Mutant' },
+    { id: 'android', label: 'Android' },
+  ],
+  contributes: { stage: 'base' },
+  entries: archetypeEntries,
+};
 
 /**
  * Flat StatModifiers -> Modifier. Cap entries map onto the *cap attribute*
@@ -157,29 +174,26 @@ const toModifier = (statModifiers: {
   return {
     ...(Object.keys(attributeDeltas).length > 0 && { attributeDeltas }),
     ...(statModifiers.tagModifiers && {
-      categoryDeltas: statModifiers.tagModifiers as Record<string, number>,
+      categoryDeltas: {
+        traits: statModifiers.tagModifiers as Record<string, number>,
+      },
     }),
   };
 };
 
-const traits: Trait[] = AVAILABLE_PERKS.map(perk => ({
+const traitEntries: FacetEntry[] = AVAILABLE_PERKS.map(perk => ({
   id: perk.id,
-  name: perk.name,
+  label: perk.name,
   description: perk.description,
   categoryId: perk.tag,
-  allowedArchetypeIds: perk.allowedSpecies,
-  recipeIds: perk.recipeIds,
+  requires: perk.allowedSpecies
+    ? { archetypes: perk.allowedSpecies }
+    : undefined,
+  links: perk.recipeIds ? { recipes: perk.recipeIds } : undefined,
   modifier: perk.statModifiers ? toModifier(perk.statModifiers) : undefined,
 }));
 
-const qualities: Quality[] = AVAILABLE_DISTINCTIONS.map(distinction => ({
-  id: distinction.id,
-  name: distinction.name,
-  description: distinction.description,
-  allowedArchetypeIds: distinction.allowedSpecies,
-}));
-
-const categoryBonuses: CategoryBonusRule[] = Object.entries(
+const categoryBonuses: FacetBonusRule[] = Object.entries(
   TAG_SCORE_BONUSES
 ).flatMap(([categoryId, bonuses]) =>
   bonuses.map(bonus => ({
@@ -189,37 +203,94 @@ const categoryBonuses: CategoryBonusRule[] = Object.entries(
   }))
 );
 
+/**
+ * The old `traits` collection: multi-select, categorized, contributes
+ * resource deltas and category score, and grants category bonuses. Carries
+ * the Perfect Mutant carve-out as a `scoreExclusions` entry (was
+ * `archetypeRules`).
+ */
+const traits: FacetCollection = {
+  id: 'traits',
+  singular: 'Perk',
+  plural: 'Perks',
+  categorySingular: 'Tag',
+  categoryPlural: 'Tags',
+  selection: 'multi',
+  legacyField: 'traitIds',
+  categories: afterworldsTraitCategories,
+  contributes: { deltaRoles: ['resource'], categoryScore: true },
+  categoryBonuses,
+  scoreExclusions: PERFECT_MUTANT_RULE,
+  entries: traitEntries,
+};
+
+/** The old `qualities` collection: multi-select, purely descriptive. */
+const qualities: FacetCollection = {
+  id: 'qualities',
+  singular: 'Distinction',
+  plural: 'Distinctions',
+  selection: 'multi',
+  maxSelections: 3,
+  legacyField: 'qualityIds',
+  entries: AVAILABLE_DISTINCTIONS.map(distinction => ({
+    id: distinction.id,
+    label: distinction.name,
+    description: distinction.description,
+    requires: distinction.allowedSpecies
+      ? { archetypes: distinction.allowedSpecies }
+      : undefined,
+  })),
+};
+
+/**
+ * The old `modifications` field: authored per character rather than picked
+ * from a catalog, contributing after category bonuses so a cyberware's
+ * category deltas never retroactively unlock one. Unlike the other four
+ * collections, v1 had no ruleset-declared content for this — it was purely
+ * a feature flag plus a terminology override — so this collection exists
+ * now only to carry that terminology and the migration's `legacyField`.
+ */
+const modifications: FacetCollection = {
+  id: 'modifications',
+  singular: 'Cyberware',
+  plural: 'Cyberware',
+  selection: 'multi',
+  authored: true,
+  legacyField: 'modifications',
+  contributes: { stage: 'postBonus', deltaRoles: ['resource', 'cap'] },
+  entries: [],
+};
+
+/** The old `recipes` collection: a catalog, only ever reached via `links`. */
+const recipes: FacetCollection = {
+  id: 'recipes',
+  singular: 'Recipe',
+  plural: 'Recipes',
+  selection: 'catalog',
+  entries: AVAILABLE_RECIPES.map(recipe => ({
+    id: recipe.id,
+    label: recipe.name,
+    description: recipe.description,
+    materials: [...recipe.materials],
+  })),
+};
+
 export const afterworldsRuleset: RulesetDefinition = {
   id: 'afterworlds',
   name: 'Junktown Intelligence',
   version: '1.0.0',
   terminology: afterworldsTerminology,
   attributes,
-  groups: [
-    { id: 'organic', label: 'Organic' },
-    { id: 'robotic', label: 'Robotic' },
-    { id: 'mutant', label: 'Mutant' },
-    { id: 'android', label: 'Android' },
-  ],
-  archetypes,
-  defaultArchetypeId: 'Human',
-  traitCategories: afterworldsTraitCategories,
-  traits,
-  qualities,
-  recipes: AVAILABLE_RECIPES.map(recipe => ({ ...recipe })),
-  categoryBonuses,
-  archetypeRules: PERFECT_MUTANT_RULE,
+  facets: [archetypes, traits, qualities, modifications, recipes],
   features: {
     quests: true,
-    recipes: true,
     discord: true,
     map: true,
-    gitSync: true,
-    modifications: true,
     influenceReport: true,
     relationshipGraph: true,
+    characterStats: true,
+    factionStats: true,
   },
-  limits: { maxQualities: 3 },
   map: { imageKey: 'map' },
   branding: { appName: APP_NAME },
 };
